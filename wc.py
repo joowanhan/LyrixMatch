@@ -5,6 +5,7 @@ Using frequency: Using a dictionary of word frequency.
 # multidict는 동일한 키에 여러 값을 저장할 수 있는 딕셔너리 구조를 제공합니다.
 import multidict as multidict
 
+import string
 import numpy as np
 import json
 import os
@@ -15,31 +16,40 @@ from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 # ImageColorGenerator: 이미지 색상 추출
 import matplotlib.pyplot as plt
 
-# 운영체제에 따른 폰트 설정
-import platform
-system_name = platform.system()
+# Cloud Run은 컨테이너 안에 아무 폰트도 기본 포함되어 있지 않으니 로컬로 추가
 
-if system_name == 'Windows':
-    plt.rcParams['font.family'] = 'Malgun Gothic'  # 윈도우(맑은 고딕)
-    font_path = 'C:\Windows\Fonts/malgun.ttf'  # 윈도우
-    print('windows')
-elif system_name == 'Darwin':  # Mac OS
-    plt.rcParams['font.family'] = 'AppleGothic'  # 맥(애플고딕)
-    font_path = '/Library/Fonts/AppleGothic.ttf'  # 맥
-    print('mac')
-else:  # Linux
-    plt.rcParams['font.family'] = 'NanumGothic'  # Linux(나눔고딕)
-    font_path = '/usr/share/fonts/truetype/malgun.ttf'  # 구글 콜랩
-    print('linux')
+font_path = "./fonts/NanumGothic.ttf"  # Cloud Run에서도 접근 가능한 경로
+
 
 plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
 
 # 단순한 코러스 불용어 추가
 stopwords = set(STOPWORDS)
 stopwords.add("uh")
+stopwords.add("eh")
 stopwords.add("oh")
+stopwords.add("ooh")
+stopwords.add("ah")
 stopwords.add("huh")
 stopwords.add("yeah")
+stopwords.add("la")
+stopwords.add("woo")
+stopwords.add("널")
+stopwords.add("넌")
+stopwords.add("좀")
+stopwords.add("이")
+stopwords.add("내")
+stopwords.add("난")
+stopwords.update(string.ascii_lowercase)
+
+# 한국어 불용어 추가
+# txt 파일에서 단어들을 읽어와서 set에 추가
+with open("stopwords_kor.txt", "r", encoding="utf-8") as file:
+    for line in file:
+        word = line.strip()  # 줄 끝 개행 문자 제거
+        if word:  # 빈 줄 방지
+            stopwords.add(word)
+
 
 # 단어 빈도 계산 함수
 
@@ -87,12 +97,13 @@ def makeWordCloud(freq_dict, title):
     wc = WordCloud(
         background_color="white",
         font_path=font_path,
-        # max_words=50,
+        max_words=50,
         # min_font_size=15,
-        # max_font_size=150,
+        # max_font_size=300,
         stopwords=stopwords,
         mask=mask,
-        color_func=image_colors
+        color_func=image_colors,
+        prefer_horizontal=1.0,  # 모든 단어를 수평으로
     )
 
     # generate word cloud
@@ -108,37 +119,81 @@ def makeWordCloud(freq_dict, title):
 
 #########################################################################
 # JSON 파일 불러오기
-with open("playlist_lyrics_processed.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
+def generate_all_wordclouds(stopwords, getFrequencyDictForText, makeWordCloud):
+    with open("playlist_lyrics_processed.json", "r", encoding="utf-8") as file:
+        data = json.load(file)
 
 # 객체별 워드클라우드 생성
-for item in data:
-    # ── ① 곡 제목·아티스트 단어를 불용어에 추가 ───────────────────────────
-    #    clean_title 이 있으면 특수문자·대소문자 처리가 끝난 상태이므로 그대로 써도 OK
-    title_words = re.sub(r"[^\w\s']", " ", item["clean_title"]).split()
-    artist_words = re.sub(
-        r"[^\w\s']", " ", item["artist"]).split()  # 필요 없으면 제거
-    title_stopwords = {w.lower() for w in title_words + artist_words}
+    for item in data:
+        # ── ① 곡 제목·아티스트 단어를 불용어에 추가 ───────────────────────────
+        #    clean_title 이 있으면 특수문자·대소문자 처리가 끝난 상태이므로 그대로 써도 OK
+        title_words = re.sub(r"[^\w\s']", " ", item["clean_title"]).split()
+        artist_words = re.sub(
+            r"[^\w\s']", " ", item["artist"]).split()  # 필요 없으면 제거
+        title_stopwords = {w.lower() for w in title_words + artist_words}
 
     #    전역 stopwords 세트에 합친다 (루프마다 누적되지 않도록 copy 사용)
-    local_stopwords = stopwords | title_stopwords
+        local_stopwords = stopwords | title_stopwords
 
     # ── ② 가사 문자열 준비 ─────────────────────────────────────────────
     # lyrics_processed(문자열)를 합쳐 하나의 텍스트로
-    lyrics = " ".join(item["lyrics_processed"].splitlines())
+        lyrics = " ".join(item["lyrics_processed"].splitlines())
 
-    try:
-        print(title_stopwords)
+        try:
+            print(title_stopwords)
         # ③ 단어 빈도 계산(추가 불용어 반영)
         # 가사 문자열을 넘겨줘야 split 에러가 안 납니다
-        freq_dict = getFrequencyDictForText(
-            lyrics,
-            extra_stopwords=local_stopwords      # ← 수정: 함수 인자 추가
-        )
+            freq_dict = getFrequencyDictForText(
+                lyrics,
+                extra_stopwords=local_stopwords      # ← 수정: 함수 인자 추가
+            )
         # ④ 워드클라우드 생성
-        makeWordCloud(
-            freq_dict, f"{item['original_title']} - {item['artist']}")
+            makeWordCloud(
+                freq_dict, f"{item['original_title']} - {item['artist']}")
 
-    except Exception as e:
-        print(
-            f"워드클라우드를 생성할 수 없습니다: {item['original_title']} - {item['artist']} ({e})")
+        except Exception as e:
+            print(
+                f"워드클라우드를 생성할 수 없습니다: {item['original_title']} - {item['artist']} ({e})")
+
+#########################################################################
+
+
+def generate_wordcloud_by_title(title_query: str) -> str:
+    with open("playlist_lyrics_processed.json", "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    for item in data:
+        title = item.get("clean_title", "").lower()
+        if title == title_query.lower():
+            title_words = re.sub(r"[^\w\s']", " ", item["clean_title"]).split()
+            artist_words = re.sub(r"[^\w\s']", " ", item["artist"]).split()
+            title_stopwords = {w.lower() for w in title_words + artist_words}
+            local_stopwords = stopwords | title_stopwords
+            lyrics = " ".join(item["lyrics_processed"].splitlines())
+
+            freq_dict = getFrequencyDictForText(
+                lyrics, extra_stopwords=local_stopwords)
+
+            # 워드클라우드 이미지 저장
+            mask = np.array(Image.open("mask_image.png"))
+            image_colors = ImageColorGenerator(mask)
+            wc = WordCloud(
+                background_color="white",
+                font_path=font_path,
+                max_words=50,
+                stopwords=stopwords,
+                mask=mask,
+                color_func=image_colors,
+                prefer_horizontal=1.0,
+            )
+            wc.generate_from_frequencies(dict(freq_dict.items()))
+            output_path = f"./static/wordclouds/{item['clean_title']}.png"
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            wc.to_file(output_path)
+            return output_path
+
+    raise ValueError("No matching song found")
+
+
+# if __name__ == "__main__":
+    # generate_all_wordclouds(stopwords, getFrequencyDictForText, makeWordCloud)
