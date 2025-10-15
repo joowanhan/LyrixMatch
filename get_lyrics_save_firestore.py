@@ -218,29 +218,28 @@ def regex_clean_lyrics(lyrics_raw: str | None) -> str:
 
 
 # ────────────────────────────────
-# deprecated
-# get_lyrics_save_json.py의 구조를 함수화 (05/23 추가)
-# firestore 저장으로 변경 후 deprecated
+def process_playlist_and_save_to_firestore(playlist_url: str) -> str:
+    """
+    Spotify 플레이리스트 URL을 받아 ID를 추출하고,
+    가사 수집 및 전처리 후 Firestore에 저장하고 문서 ID를 반환한다.
+    """
+    playlist_id_match = re.search(r"playlist/([a-zA-Z0-9]+)", playlist_url)
+    if not playlist_id_match:
+        raise ValueError("잘못된 Spotify 플레이리스트 URL입니다.")
 
+    playlist_id = playlist_id_match.group(1)
 
-# def process_playlist_to_json(playlist_url: str) -> dict:
-#     import re
-
-#     playlist_id_match = re.search(r"playlist/([a-zA-Z0-9]+)", playlist_url)
-#     if not playlist_id_match:
-#         return {"error": "Invalid Spotify playlist URL"}
-
-#     playlist_id = playlist_id_match.group(1)
-#     main(playlist_id)
-#     return {"message": "Lyrics saved successfully", "filename": OUTPUT_JSON}
+    # main 함수를 호출하여 Firestore에 저장하고 문서 ID를 받는다.
+    document_id = main(playlist_id)
+    return document_id
 
 
 # ────────────────────────────────
 # 메인 실행
 def main(playlist_id: str) -> str:
     """
-    Spotify 플레이리스트 트랙과 가사 정보를 가져와 Firestore에 저장합니다.
-    성공 시 생성된 문서의 ID를 반환합니다.
+    Spotify 플레이리스트 트랙과 가사 정보를 가져와 Firestore에 저장한다.
+    성공 시 생성된 문서의 ID를 반환한다.
     """
 
     start = time.time()
