@@ -13,3 +13,9 @@ __pycache__/
 # IDE settings
 .idea/
 .vscode/
+
+# macOS system files
+.DS_Store
+
+# Caching folders and files
+.cache
