@@ -19,3 +19,5 @@ JPype1
 firebase-admin
 google-cloud-storage
 python-dotenv
+
+psutil

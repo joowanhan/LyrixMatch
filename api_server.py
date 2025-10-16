@@ -9,6 +9,12 @@ from dotenv import load_dotenv
 import json
 import os
 
+# 모니터링 엔드포인트 를 위한 모듈 추가
+# 시스템의 자원(메모리 등)을 확인하기 위한 psutil
+# 최근 요청 기록을 효율적으로 관리하기 위한 collections.deque
+from collections import deque
+import psutil
+import datetime
 
 # --- 모듈 임포트 ---
 # 각 모듈의 역할에 맞는 함수만 가져온다.
@@ -33,6 +39,26 @@ db = firestore.client()
 
 app = Flask(__name__)
 CORS(app)  # Flutter에서 요청할 수 있게 허용
+
+# ───── 최근 요청 5개를 저장하기 위한 전역 변수 추가 ─────
+recent_requests = deque(maxlen=5)
+
+
+# ──────────────────────────────────────────────────
+# ───── 로깅을 위한 데코레이터 추가 ─────
+# 모든 요청이 실행되기 전에 로그를 기록한다.
+@app.before_request
+def log_request_info():
+    # /debug 엔드포인트 자체에 대한 요청은 기록에서 제외하여 순환을 방지한다.
+    if request.path != "/debug":
+        recent_requests.append(
+            {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "method": request.method,
+                "path": request.path,
+                "remote_addr": request.remote_addr,
+            }
+        )
 
 
 # ────────────────────────────────
@@ -195,8 +221,54 @@ def spotify_callback():
 
 
 # ────────────────────────────────
+# 헬스 체크 엔드포인트
+@app.route("/health", methods=["GET"])
+def health_check():
+    """서버가 정상적으로 실행 중인지 간단히 확인"""
+    return jsonify({"status": "ok"}), 200
 
 
+# ────────────────────────────────
+# 디버그 정보 엔드포인트
+@app.route("/debug", methods=["GET"])
+def debug_info():
+    """서버의 상세한 내부 상태 정보 제공"""
+
+    # 1. Firestore 연결 상태 확인
+    try:
+        # 간단한 데이터 읽기 시도를 통해 실제 연결 유효성을 검사한다.
+        db.collection("user_playlists").limit(1).get()
+        firestore_status = "connected"
+    except Exception as e:
+        firestore_status = f"disconnected - {str(e)}"
+
+    # 2. 메모리 사용량 확인
+    memory_usage = psutil.virtual_memory().percent
+
+    # 3. 'failed_searches.log' 파일 최근 5줄 읽기
+    failed_log_content = []
+    try:
+        with open("failed_searches.log", "r", encoding="utf-8") as f:
+            # 파일의 마지막 라인부터 읽어서 최대 5줄을 저장한다.
+            failed_log_content = deque(f, maxlen=5)
+    except FileNotFoundError:
+        failed_log_content = ["File not found."]
+    except Exception as e:
+        failed_log_content = [f"Error reading file: {str(e)}"]
+
+    # 4. 최종 디버그 정보 조합
+    debug_data = {
+        "server_time": datetime.datetime.now().isoformat(),
+        "firestore_status": firestore_status,
+        "system_memory_usage_percent": memory_usage,
+        "recent_requests": list(recent_requests),
+        "failed_searches_log": list(failed_log_content),
+    }
+
+    return jsonify(debug_data)
+
+
+# ────────────────────────────────
 if __name__ == "__main__":
     # Cloud Run과 같은 관리형 환경에서는 gunicorn을 사용하므로,
     # 아래 host, port 설정은 로컬 테스트용이다.
