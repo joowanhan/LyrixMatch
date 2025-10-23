@@ -22,6 +22,7 @@ import lyricsgenius  # pip install lyricsgenius
 # --- [변경] 병렬 처리를 위한 모듈 추가 ---
 import concurrent.futures
 from itertools import repeat
+import random  # <-- [추가] 무작위 샘플링을 위한 모듈
 
 # ────────────────────────────────
 
@@ -298,8 +299,18 @@ def main(playlist_id: str) -> str:
         print("❌ 트랙 수집 실패")
         return None  # 실패 시 None 반환 명시
 
+    # --- [추가] 플레이리스트 트랙 수 제한 로직 ---
+    MAX_TRACKS_LIMIT = 30
+    original_track_count = len(tracks)
+    if original_track_count > MAX_TRACKS_LIMIT:
+        print(
+            f"✂️ {original_track_count}곡 발견 - {MAX_TRACKS_LIMIT}곡을 초과하여 무작위 {MAX_TRACKS_LIMIT}곡만 추출합니다."
+        )
+        tracks = random.sample(tracks, MAX_TRACKS_LIMIT)
+
     # Genius 가사 수집 + 1차 전처리 적용
-    print(f"✅ {len(tracks)}개 트랙 발견 — Genius 가사 검색 시작")
+    # [수정] 제한된 tracks 리스트의 길이를 사용하도록 변경
+    print(f"✅ {len(tracks)}개 트랙 처리 시작 — Genius 가사 검색")
     songs = get_lyrics(tracks)
 
     # 2차 전처리 적용
@@ -320,6 +331,8 @@ def main(playlist_id: str) -> str:
                 "playlistId": playlist_id,
                 "tracks": songs,
                 "createdAt": firestore.SERVER_TIMESTAMP,  # 서버 시간 기준 생성 타임스탬프 기록
+                "originalTrackCount": original_track_count,  # [추가] 원본 트랙 수 기록
+                "processedTrackCount": len(songs),  # [추가] 실제 처리된 트랙 수 기록
             }
         )
 
@@ -336,11 +349,10 @@ def main(playlist_id: str) -> str:
 
 if __name__ == "__main__":
     # billboard hot 100
-    # test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
+    test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
 
     # 테스트용 플레이리스트 URL
-    test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
-    # test_playlist_url = "https://open.spotify.com/playlist/1KrcIM8VI1vYWe67dYWD3W"
+    # test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
 
     match = re.search(r"playlist/([a-zA-Z0-9]+)", test_playlist_url)
     if match:
