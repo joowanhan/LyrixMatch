@@ -19,3 +19,9 @@ __pycache__/
 
 # Caching folders and files
 .cache
+
+# uniprocess(for backup)
+get_lyrics_save_firestore_uniprocess.py
+
+# log
+failed_searches.log

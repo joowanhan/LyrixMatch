@@ -3,7 +3,7 @@
 """
 get_lyrics_save_firestore.py
 ───────────────────────
-• Spotify 플레이리스트의 트랙 → Genius 가사 수집
+• Spotify 플레이리스트의 트랙 → Genius 가사 수집 (병렬 처리 적용)
 • Contributors/Translations 블록 제거 + 정규식 기반 추가 전처리
 • 최종 결과를 firestore에 저장 후 저장된 ID return
 """
@@ -19,6 +19,12 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import lyricsgenius  # pip install lyricsgenius
 
 # ────────────────────────────────
+# --- [변경] 병렬 처리를 위한 모듈 추가 ---
+import concurrent.futures
+from itertools import repeat
+
+# ────────────────────────────────
+
 # 환경 변수 / 토큰 설정
 import os
 from dotenv import load_dotenv  # --- 추가
@@ -138,52 +144,72 @@ def clean_genius_lyrics(raw_lyrics: str | None) -> str | None:
     return "\n".join(cleaned_lines).split("Translations")[0].strip()
 
 
+# ────────────────────────────────
+# --- [신규] 스레드에서 실행될 단일 작업 함수 ---
+def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
+    """트랙 1개에 대해 Genius API 검색 및 가사 추출 (스레드 작업용)"""
+    ori_title, clean_title = t["original_title"], t["clean_title"]
+    ori_artist = t["artist"]
+    exp_artist = expand_artists(ori_artist, ori_title)
+
+    attempts = [
+        (clean_title, ori_artist),
+        (clean_title, exp_artist),
+        (ori_title, ori_artist),
+        (ori_title, exp_artist),
+    ]
+
+    song = None
+    for title, artist in attempts:
+        try:
+            song = genius.search_song(title, artist)
+            if song:
+                break
+        except Exception as e:
+            print(f"[Genius 검색 오류] {title} – {artist} :: {e}")
+
+    if song:
+        lyrics = clean_genius_lyrics(song.lyrics)
+    else:
+        lyrics = None
+        # 스레드 환경에서 파일 쓰기. 'a'(append) 모드는 대부분 원자적(atomic)으로 동작하나,
+        # 만약 로그가 꼬일 경우 python logging 모듈 사용 고려.
+        try:
+            with open(FAILED_SEARCH_LOG, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now()}|{ori_artist}|{ori_title}\n")
+        except Exception as e:
+            print(f"[Log 쓰기 오류] {ori_artist}|{ori_title} :: {e}")
+
+    return {
+        "original_title": ori_title,
+        "clean_title": clean_title,
+        "artist": ori_artist,
+        "lyrics": lyrics,
+    }
+
+
+# --- [변경] get_lyrics 함수를 ThreadPoolExecutor를 사용하도록 수정 ---
 def get_lyrics(tracks: list[dict]) -> list[dict]:
-    """Genius API 여러 패턴으로 검색 → 가사 클린"""
+    """Genius API 여러 패턴으로 검색 → 가사 클린 (ThreadPoolExecutor 사용)"""
     genius = lyricsgenius.Genius(
         GENIUS_TOKEN,
         timeout=15,
         retries=3,
         remove_section_headers=True,
     )
+
+    # API Rate Limiting을 고려하여 max_workers는 3으로 설정
+    MAX_WORKERS = 3
     out = []
 
-    for t in tracks:
-        ori_title, clean_title = t["original_title"], t["clean_title"]
-        ori_artist = t["artist"]
-        exp_artist = expand_artists(ori_artist, ori_title)
+    print(f"⚡️ {len(tracks)}개 트랙, {MAX_WORKERS}개 스레드로 동시 가사 수집 시작…")
 
-        attempts = [
-            (clean_title, ori_artist),
-            (clean_title, exp_artist),
-            (ori_title, ori_artist),
-            (ori_title, exp_artist),
-        ]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # executor.map을 사용하여 tracks의 각 항목을 fetch_single_lyric 함수에 동시 적용
+        # repeat(genius)를 통해 모든 스레드에 동일한 genius 객체를 전달
+        # list()로 감싸서 모든 스레드 작업이 완료되고 결과를 수집할 때까지 대기
+        out = list(executor.map(fetch_single_lyric, tracks, repeat(genius)))
 
-        song = None
-        for title, artist in attempts:
-            try:
-                song = genius.search_song(title, artist)
-                if song:
-                    break
-            except Exception as e:
-                print(f"[Genius 검색 오류] {title} – {artist} :: {e}")
-
-        if song:
-            lyrics = clean_genius_lyrics(song.lyrics)
-        else:
-            lyrics = None
-            with open(FAILED_SEARCH_LOG, "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now()}|{ori_artist}|{ori_title}\n")
-
-        out.append(
-            {
-                "original_title": ori_title,
-                "clean_title": clean_title,
-                "artist": ori_artist,
-                "lyrics": lyrics,
-            }
-        )
     return out
 
 
@@ -248,7 +274,7 @@ def main(playlist_id: str) -> str:
 
     if not tracks:
         print("❌ 트랙 수집 실패")
-        return
+        return None  # 실패 시 None 반환 명시
 
     # Genius 가사 수집 + 1차 전처리 적용
     print(f"✅ {len(tracks)}개 트랙 발견 — Genius 가사 검색 시작")
@@ -259,7 +285,7 @@ def main(playlist_id: str) -> str:
     for s in songs:
         s["lyrics_processed"] = regex_clean_lyrics(s.get("lyrics"))
 
-    # JSON 파일 저장 대신 Firestore에 데이터 저장
+    # Firestore에 데이터 저장
     try:
         # 각 요청을 위한 고유 ID 생성
         request_id = str(uuid.uuid4())
@@ -287,8 +313,9 @@ def main(playlist_id: str) -> str:
 
 
 if __name__ == "__main__":
-    # 테스트용 플레이리스트 ID
-    test_playlist_url = "https://open.spotify.com/playlist/1KrcIM8VI1vYWe67dYWD3W"
+    # 테스트용 플레이리스트 URL
+    test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
+    # test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
     match = re.search(r"playlist/([a-zA-Z0-9]+)", test_playlist_url)
     if match:
         playlist_id = match.group(1)
