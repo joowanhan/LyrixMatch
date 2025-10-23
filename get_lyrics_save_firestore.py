@@ -145,9 +145,15 @@ def clean_genius_lyrics(raw_lyrics: str | None) -> str | None:
 
 
 # ────────────────────────────────
-# --- [신규] 스레드에서 실행될 단일 작업 함수 ---
+# --- [변경] 429 오류 대응을 위한 지수 백오프(Exponential Backoff) 로직 추가 ---
 def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
-    """트랙 1개에 대해 Genius API 검색 및 가사 추출 (스레드 작업용)"""
+    """트랙 1개에 대해 Genius API 검색 및 가사 추출 (스레드 작업용 + 429 재시도)"""
+
+    # --- [신규] 재시도 로직을 위한 상수 ---
+    MAX_RETRIES = 3  # 최대 재시도 횟수
+    BASE_BACKOFF = 5  # 기본 대기 시간 (초). 5초, 10초, 20초로 증가.
+    # ────────────────────────────────
+
     ori_title, clean_title = t["original_title"], t["clean_title"]
     ori_artist = t["artist"]
     exp_artist = expand_artists(ori_artist, ori_title)
@@ -161,12 +167,27 @@ def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
 
     song = None
     for title, artist in attempts:
-        try:
-            song = genius.search_song(title, artist)
-            if song:
-                break
-        except Exception as e:
-            print(f"[Genius 검색 오류] {title} – {artist} :: {e}")
+        # --- [신규] 429 오류 대응을 위한 재시도 루프 ---
+        for i in range(MAX_RETRIES):
+            try:
+                song = genius.search_song(title, artist)
+                if song:
+                    break  # --- [성공] 재시도 루프(inner loop) 탈출
+            except Exception as e:
+                # 429 오류 (Too Many Requests) 감지
+                if "[Errno 429]" in str(e):
+                    wait_time = BASE_BACKOFF * (2**i)  # 지수 백오프: 5s, 10s, 20s
+                    print(
+                        f"🚨 [Genius 429 Error] {title} – {artist}. {wait_time}초 후 재시도... (시도 {i+1}/{MAX_RETRIES})"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    # 429가 아닌 다른 검색 오류 (e.g., 타임아웃, 500 서버 오류)
+                    print(f"[Genius 검색 오류] {title} – {artist} :: {e}")
+                    break  # 재시도 루프 탈출 (다음 attempt로 이동)
+
+        if song:
+            break  # --- [성공] 검색어 시도 루프(outer loop) 탈출
 
     if song:
         lyrics = clean_genius_lyrics(song.lyrics)
@@ -194,11 +215,12 @@ def get_lyrics(tracks: list[dict]) -> list[dict]:
     genius = lyricsgenius.Genius(
         GENIUS_TOKEN,
         timeout=15,
-        retries=3,
+        retries=3,  # 라이브러리 자체 재시도 (429 외의 오류에 도움됨)
         remove_section_headers=True,
     )
 
-    # API Rate Limiting을 고려하여 max_workers는 3으로 설정
+    # --- [변경] MAX_WORKERS를 10 -> 3으로 대폭 감소 (API Rate Limiting 대응) ---
+    # IP 차단 해제 후 5 정도로 테스트하며 점진적 상향 고려
     MAX_WORKERS = 3
     out = []
 
@@ -249,7 +271,7 @@ def process_playlist_and_save_to_firestore(playlist_url: str) -> str:
     Spotify 플레이리스트 URL을 받아 ID를 추출하고,
     가사 수집 및 전처리 후 Firestore에 저장하고 문서 ID를 반환한다.
     """
-    playlist_id_match = re.search(r"playlist/([a-zA-Z0-9]+)", playlist_url)
+    playlist_id_match = re.search(r"playlist/([a-zA-Z0_9]+)", playlist_url)
     if not playlist_id_match:
         raise ValueError("잘못된 Spotify 플레이리스트 URL입니다.")
 
@@ -313,10 +335,19 @@ def main(playlist_id: str) -> str:
 
 
 if __name__ == "__main__":
+    # billboard hot 100
+    # test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
+
     # 테스트용 플레이리스트 URL
     test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
-    # test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
+    # test_playlist_url = "https://open.spotify.com/playlist/1KrcIM8VI1vYWe67dYWD3W"
+
     match = re.search(r"playlist/([a-zA-Z0-9]+)", test_playlist_url)
     if match:
         playlist_id = match.group(1)
         main(playlist_id)
+    else:
+        # --- [추가] URL에서 ID를 찾지 못했을 경우 에러 메시지 ---
+        print(
+            f"❌ '{test_playlist_url}'에서 플레이리스트 ID를 추출할 수 없습니다. URL 형식을 확인하세요."
+        )
