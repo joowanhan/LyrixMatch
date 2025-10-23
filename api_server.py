@@ -99,15 +99,12 @@ def crawl_playlist():
         doc_id = process_playlist_and_save_to_firestore(playlist_url)
         if doc_id:
             # 클라이언트에게 이 ID를 전달한다.
-            return jsonify(
-                {"message": "플레이리스트 처리 완료", "playlist_doc_id": doc_id}
-            )
+            return jsonify({"doc_id": doc_id}), 200
         else:
             return jsonify({"error": "플레이리스트 처리 중 서버 오류 발생"}), 500
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Error during crawl: {e}")  # 디버깅을 위한 로그 추가
+        return jsonify({"error": f"처리 중 오류: {str(e)}"}), 500
 
 
 # ────────────────────────────────
