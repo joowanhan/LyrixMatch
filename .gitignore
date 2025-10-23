@@ -19,3 +19,10 @@ __pycache__/
 
 # Caching folders and files
 .cache
+
+# for backup and test
+get_lyrics_save_firestore_uniprocess.py
+genius_test.py
+
+# log
+failed_searches.log
