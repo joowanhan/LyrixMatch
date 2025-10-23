@@ -220,9 +220,7 @@ def get_lyrics(tracks: list[dict]) -> list[dict]:
         remove_section_headers=True,
     )
 
-    # --- [변경] MAX_WORKERS를 10 -> 3으로 대폭 감소 (API Rate Limiting 대응) ---
-    # IP 차단 해제 후 5 정도로 테스트하며 점진적 상향 고려
-    MAX_WORKERS = 3
+    MAX_WORKERS = 10
     out = []
 
     print(f"⚡️ {len(tracks)}개 트랙, {MAX_WORKERS}개 스레드로 동시 가사 수집 시작…")
@@ -349,10 +347,13 @@ def main(playlist_id: str) -> str:
 
 if __name__ == "__main__":
     # billboard hot 100
-    test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
+    # test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
 
-    # 테스트용 플레이리스트 URL
+    # 테스트용 플레이리스트 URL - 3 songs
     # test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
+
+    # 테스트용 플레이리스트 URL - 30songs
+    test_playlist_url = "https://open.spotify.com/playlist/1X6xWFKgyzHeWCeznKkkkx"
 
     match = re.search(r"playlist/([a-zA-Z0-9]+)", test_playlist_url)
     if match:
