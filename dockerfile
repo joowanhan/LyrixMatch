@@ -32,9 +32,8 @@ ENV PATH="$JAVA_HOME/bin:$PATH"
 COPY ./models/bart /app/models/bart
 COPY ./models/eenzeenee_t5 /app/models/eenzeenee_t5
 
-# --- 8. Copy Static Files, Fonts, and Source Code ---
+# --- 8. Copy Fonts and Source Code ---
 COPY ./fonts /app/fonts
-COPY ./static /app/static
 COPY . .
 
 # --- 9. Run App with Gunicorn (Production Server) ---
