@@ -31,15 +31,14 @@ ENV PATH="$JAVA_HOME/bin:$PATH"
 # --- 7. Copy Models ---
 COPY ./models/bart /app/models/bart
 COPY ./models/eenzeenee_t5 /app/models/eenzeenee_t5
-# COPY ./models/kobart /app/models/kobart
 
 # --- 8. Copy Static Files, Fonts, and Source Code ---
 COPY ./fonts /app/fonts
 COPY ./static /app/static
 COPY . .
 
-# --- 9. Expose Port ---
-EXPOSE 8080
-
-# --- 10. Run App ---
-CMD ["python", "api_server.py"]
+# --- 9. Run App with Gunicorn (Production Server) ---
+# EXPOSE 8080은 Cloud Run에서 사용하지 않으므로 삭제
+# Gunicorn을 사용하여 api_server.py 내부의 'app' 객체를 실행
+# Cloud Run이 주입하는 $PORT 환경 변수를 사용
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--threads", "8", "--timeout", "0", "api_server:app"]

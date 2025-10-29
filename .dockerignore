@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+.dockerignore
+dockerfile
+
+# 문서
+README.md
+
+# Python 가상 환경 및 캐시
+.venv
+venv
+__pycache__
+*.pyc
+.cache
+
+# 로컬 환경 변수
+.env
+
+# Firestore로 대체된 데이터
+playlist_lyrics_processed.json
+
+# GCS로 대체된 로컬 static 파일
+examples/
+
+# 기타
+mask_image.png
+
+# 테스트 스크립트 (서버 구동과 무관)
+api_test.py
