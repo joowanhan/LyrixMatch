@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     gcc python3-dev build-essential \
     curl git \
     libglib2.0-0 libsm6 libxext6 libxrender-dev ffmpeg \
-    default-jdk \
+    openjdk-11-jdk-headless \
     # fonts-nanum \
  && pip install --no-cache-dir -r requirements.txt \
  && apt-get purge -y --auto-remove gcc python3-dev build-essential \
