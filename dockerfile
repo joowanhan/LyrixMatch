@@ -40,6 +40,11 @@ COPY . .
 # EXPOSE 8080은 Cloud Run에서 사용하지 않으므로 삭제
 # Gunicorn을 사용하여 api_server.py 내부의 'app' 객체를 실행
 # Cloud Run이 주입하는 $PORT 환경 변수를 사용
-# [변경] --timeout 300 (Cloud Run 프로브 240초보다 길게)
+
 # [변경] --threads 제거, --worker-connections 1000 추가
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "300", "api_server:app"]
+# CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "300", "api_server:app"]
+
+# [변경] -k gevent (비동기 워커) 사용
+# [변경] --preload는 반드시 제거된 상태여야 함
+# [변경] --timeout 120초 (시작이 빠르므로 300초 불필요)
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "120", "api_server:app"]

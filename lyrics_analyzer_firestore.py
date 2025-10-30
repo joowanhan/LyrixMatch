@@ -13,6 +13,8 @@ from collections import Counter
 from typing import List, Tuple
 import nltk
 import deepl
+from sklearn.feature_extraction.text import CountVectorizer
+from konlpy.tag import Okt
 
 # ────────────────────────────────
 # --- 경고 메시지 숨기기 ---
@@ -36,59 +38,16 @@ nltk.download("stopwords", quiet=True)
 nltk.download("punkt", quiet=True)
 # ────────────────────────────────
 
-# --- [추가] 모델 및 NLP 도구 전역 로딩 (파일 최상단) ---
-from sklearn.feature_extraction.text import CountVectorizer
-from konlpy.tag import Okt
-
-print("🔄 [Global Init] Loading NLP models and tools...")
-try:
-    # 1. 요약 모델 (BART)
-    print("  Loading BART Model...")
-    tokenizer_bart = AutoTokenizer.from_pretrained(BART_PATH)
-    model_bart = AutoModelForSeq2SeqLM.from_pretrained(BART_PATH).to("cpu")
-    summarizer_bart_pipeline = pipeline(
-        "summarization", model=model_bart, tokenizer=tokenizer_bart
-    )
-    print("✅ BART Model loaded.")
-
-    # 2. 요약 모델 (T5)
-    print("  Loading T5 Model...")
-    tokenizer_t5 = AutoTokenizer.from_pretrained(T5_PATH)
-    model_t5 = AutoModelForSeq2SeqLM.from_pretrained(T5_PATH).to("cpu")
-    # T5는 pipeline 대신 직접 generate 사용 (원래 코드 방식 유지)
-    print("✅ T5 Model loaded.")
-
-    # 3. DeepL 번역기
-    translator_deepl = deepl.Translator(DEEPL_KEY) if DEEPL_KEY else None
-    if translator_deepl:
-        print("✅ DeepL Translator loaded.")
-    else:
-        print("⚠️ Warning: DEEPL_KEY not set. Translation will be skipped.")
-
-    # 4. 영어 키워드 도구
-    vectorizer_en = CountVectorizer(
-        stop_words="english",
-        token_pattern=r"(?u)\b[a-zA-Z]{3,}\b",  # 3자 이상 알파벳
-    )
-    print("✅ English Keyword Vectorizer loaded.")
-
-    # 5. 한국어 키워드 도구
-    okt = Okt()
-    print("✅ Korean (Okt) Tokenizer loaded.")
-    print("👍 [Global Init] All models and tools loaded successfully.")
-
-except Exception as e:
-    print(f"❌ [Global Init] Failed to load models: {e}")
-    # 실패 시 None으로 설정 (api_server.py에서 확인 가능)
-    (
-        summarizer_bart_pipeline,
-        tokenizer_t5,
-        model_t5,
-        translator_deepl,
-        vectorizer_en,
-        okt,
-    ) = (None,) * 6
+# --- [변경] 모델/객체를 None으로 전역 선언 (Lazy Loading) ---
+print("ℹ️ [Global Init] Declaring lazy-load model variables as None.")
+_summarizer_bart_pipeline = None
+_tokenizer_t5 = None
+_model_t5 = None
+_translator_deepl = None
+_vectorizer_en = None
+_okt = None
 # ────────────────────────────────
+
 # ---------------------------  1) 언어 감지 --------------------------- #
 
 
@@ -111,22 +70,20 @@ def detect_language(text: str, hangul_weight: float = 0.5) -> str:
 
 
 def summarize_en(text: str, max_len: int = 90, min_len: int = 25) -> str:
-    # tokenizer = AutoTokenizer.from_pretrained(
-    #     BART_PATH
-    # )  # Cloud Run 오프라인 상태이므로 다운, 상대 경로로 지정
-    # model = AutoModelForSeq2SeqLM.from_pretrained(BART_PATH).to("cpu")
-    # with torch.no_grad():
-    #     summarizer = pipeline("summarization", model=model, tokenizer=tokenizer)
-    #     summary = summarizer(
-    #         text, min_length=min_len, max_length=max_len, do_sample=False
-    #     )[0]["summary_text"]
-    # return summary.strip()
+    global _summarizer_bart_pipeline  # 전역 변수 사용 선언
 
-    # [변경] 전역 'summarizer_bart_pipeline' 사용
-    if not summarizer_bart_pipeline:
-        return "BART 모델 로딩 실패"
+    # [추가] 모델이 로드되지 않았으면 지금 로드
+    if _summarizer_bart_pipeline is None:
+        print("🔄 [Lazy Load] Loading BART Model...")
+        tokenizer = AutoTokenizer.from_pretrained(BART_PATH)
+        model = AutoModelForSeq2SeqLM.from_pretrained(BART_PATH).to("cpu")
+        _summarizer_bart_pipeline = pipeline(
+            "summarization", model=model, tokenizer=tokenizer
+        )
+        print("✅ BART Model loaded.")
+
     with torch.no_grad():
-        summary = summarizer_bart_pipeline(
+        summary = _summarizer_bart_pipeline(
             text, min_length=min_len, max_length=max_len, do_sample=False
         )[0]["summary_text"]
     return summary.strip()
@@ -136,41 +93,23 @@ def summarize_en(text: str, max_len: int = 90, min_len: int = 25) -> str:
 
 
 def summarize_ko(text: str, max_len: int = 64, min_len: int = 10) -> str:
-    # tokenizer = AutoTokenizer.from_pretrained(T5_PATH)
-    # model = AutoModelForSeq2SeqLM.from_pretrained(T5_PATH).to("cpu")
+    global _tokenizer_t5, _model_t5  # 전역 변수 사용 선언
 
-    # prefix = "summarize: "
-    # input_text = prefix + text.replace("\n", " ").strip()
-    # inputs = tokenizer(
-    #     [input_text], max_length=512, truncation=True, return_tensors="pt"
-    # )
-
-    # with torch.no_grad():
-    #     output = model.generate(
-    #         **inputs,
-    #         num_beams=3,
-    #         do_sample=True,
-    #         min_length=min_len,
-    #         max_length=max_len,
-    #         early_stopping=True,
-    #     )
-
-    # decoded = tokenizer.batch_decode(output, skip_special_tokens=True)[0].strip()
-    # sentences = nltk.sent_tokenize(decoded)
-    # return " ".join(sentences[:3])
-
-    # [변경] 전역 'tokenizer_t5'와 'model_t5' 사용
-    if not tokenizer_t5 or not model_t5:
-        return "T5 모델 로딩 실패"
+    # [추가] 모델이 로드되지 않았으면 지금 로드
+    if _tokenizer_t5 is None or _model_t5 is None:
+        print("🔄 [Lazy Load] Loading T5 Model...")
+        _tokenizer_t5 = AutoTokenizer.from_pretrained(T5_PATH)
+        _model_t5 = AutoModelForSeq2SeqLM.from_pretrained(T5_PATH).to("cpu")
+        print("✅ T5 Model loaded.")
 
     prefix = "summarize: "
     input_text = prefix + text.replace("\n", " ").strip()
-    inputs = tokenizer_t5(
+    inputs = _tokenizer_t5(
         [input_text], max_length=512, truncation=True, return_tensors="pt"
     )
 
     with torch.no_grad():
-        output = model_t5.generate(
+        output = _model_t5.generate(
             **inputs,
             num_beams=3,
             do_sample=True,
@@ -178,7 +117,7 @@ def summarize_ko(text: str, max_len: int = 64, min_len: int = 10) -> str:
             max_length=max_len,
             early_stopping=True,
         )
-    decoded = tokenizer_t5.batch_decode(output, skip_special_tokens=True)[0].strip()
+    decoded = _tokenizer_t5.batch_decode(output, skip_special_tokens=True)[0].strip()
     sentences = nltk.sent_tokenize(decoded)
     return " ".join(sentences[:3])
 
@@ -187,53 +126,54 @@ def summarize_ko(text: str, max_len: int = 64, min_len: int = 10) -> str:
 
 
 def translate_to_ko(text: str) -> str:
-    # translator = deepl.Translator(DEEPL_KEY)
-    # return translator.translate_text(text, target_lang="KO").text
-    # [변경] 전역 'translator_deepl' 사용
-    if not translator_deepl:
+    global _translator_deepl
+
+    # [추가] 번역기가 로드되지 않았으면 지금 로드
+    if _translator_deepl is None and DEEPL_KEY:
+        print("🔄 [Lazy Load] Loading DeepL Translator...")
+        _translator_deepl = deepl.Translator(DEEPL_KEY)
+        print("✅ DeepL Translator loaded.")
+
+    if not _translator_deepl:
         print("번역기 없음. 영어 요약 원본 반환.")
         return text  # DeepL 키가 없으면 영어 원본 반환
-    return translator_deepl.translate_text(text, target_lang="KO").text
+    return _translator_deepl.translate_text(text, target_lang="KO").text
 
 
 # ---------------------------  4) 주요 단어 추출 --------------------------- #
 
 
 def keywords_en(text: str, top_k: int = 10) -> List[str]:
-    # from sklearn.feature_extraction.text import CountVectorizer
 
-    # vectorizer = CountVectorizer(
-    #     stop_words="english",
-    #     token_pattern=r"(?u)\b[a-zA-Z]{3,}\b",  # 3자 이상 알파벳
-    # )
-    # X = vectorizer.fit_transform([text.lower()])
-    # counts = X.toarray().sum(axis=0)
-    # vocab = vectorizer.get_feature_names_out()
-    # freq = sorted(zip(vocab, counts), key=lambda x: x[1], reverse=True)
-    # return [w for w, _ in freq[:top_k]]
+    global _vectorizer_en
 
-    # [변경] 전역 'vectorizer_en' 사용
-    if not vectorizer_en:
-        return ["영어 키워드 모델 로딩 실패"]
-    X = vectorizer_en.fit_transform([text.lower()])
+    # [추가] 벡터라이저가 로드되지 않았으면 지금 로드
+    if _vectorizer_en is None:
+        print("🔄 [Lazy Load] Loading English Keyword Vectorizer...")
+        _vectorizer_en = CountVectorizer(
+            stop_words="english",
+            token_pattern=r"(?u)\b[a-zA-Z]{3,}\b",  # 3자 이상 알파벳
+        )
+        print("✅ English Keyword Vectorizer loaded.")
+
+    X = _vectorizer_en.fit_transform([text.lower()])
     counts = X.toarray().sum(axis=0)
-    vocab = vectorizer_en.get_feature_names_out()
+    vocab = _vectorizer_en.get_feature_names_out()
     freq = sorted(zip(vocab, counts), key=lambda x: x[1], reverse=True)
     return [w for w, _ in freq[:top_k]]
 
 
 def keywords_ko(text: str, top_k: int = 10) -> List[str]:
-    # from konlpy.tag import Okt
 
-    # okt = Okt()
-    # nouns = [n for n in okt.nouns(text) if len(n) > 1]  # 2글자 이상
-    # cnt = Counter(nouns).most_common(top_k)
-    # return [w for w, _ in cnt]
+    global _okt
 
-    # [변경] 전역 'okt' 사용
-    if not okt:
-        return ["한국어 키워드 모델 로딩 실패"]
-    nouns = [n for n in okt.nouns(text) if len(n) > 1]  # 2글자 이상
+    # [추가] Okt가 로드되지 않았으면 지금 로드
+    if _okt is None:
+        print("🔄 [Lazy Load] Loading Korean (Okt) Tokenizer...")
+        _okt = Okt()
+        print("✅ Korean (Okt) Tokenizer loaded.")
+
+    nouns = [n for n in _okt.nouns(text) if len(n) > 1]  # 2글자 이상
     cnt = Counter(nouns).most_common(top_k)
     return [w for w, _ in cnt]
 
