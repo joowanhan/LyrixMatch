@@ -47,4 +47,6 @@ COPY . .
 # [변경] -k gevent (비동기 워커) 사용
 # [변경] --preload는 반드시 제거된 상태여야 함
 # [변경] --timeout 120초 (시작이 빠르므로 300초 불필요)
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "120", "api_server:app"]
+# CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "120", "api_server:app"]
+# [변경] Gunicorn CMD 대신 Python을 직접 실행
+CMD ["python", "api_server.py"]

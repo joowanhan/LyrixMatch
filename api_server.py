@@ -1,13 +1,12 @@
 # api_server.py (Refactored)
-# --- [추가] Gevent 몽키 패치 ---
-# [중요] 이 코드는 다른 어떤 모듈(spotipy, flask 등)보다도 먼저 실행되어야 한다.
-try:
-    from gevent import monkey
+# --- Gevent 몽키 패치 --- gunicorn 사용시
+# try:
+#     from gevent import monkey
 
-    monkey.patch_all()
-    print("✅ Gevent monkey patching applied.")
-except ImportError:
-    print("⚠️ Gevent not found. Skipping monkey patching.")
+#     monkey.patch_all()
+#     print("✅ Gevent monkey patching applied.")
+# except ImportError:
+#     print("⚠️ Gevent not found. Skipping monkey patching.")
 # -----------------------------
 
 from spotipy.oauth2 import SpotifyOAuth
@@ -307,4 +306,15 @@ def debug_info():
 if __name__ == "__main__":
     # Cloud Run과 같은 관리형 환경에서는 gunicorn을 사용하므로,
     # 아래 host, port 설정은 로컬 테스트용이다.
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    # app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+    # [변경] Flask의 app.run() 대신 waitress.serve()를 사용
+    from waitress import serve
+
+    # Cloud Run이 $PORT 환경 변수를 주입한다.
+    port = int(os.environ.get("PORT", 8080))
+
+    print(f"🔄 Starting Waitress server on port {port}...")
+
+    # app 객체는 파일 중간의 create_app() 호출로 이미 생성되어 있음
+    serve(app, host="0.0.0.0", port=port)
