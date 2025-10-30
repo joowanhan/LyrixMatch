@@ -1,21 +1,10 @@
 # api_server.py (Refactored)
-# --- Gevent 몽키 패치 --- gunicorn 사용시
-# try:
-#     from gevent import monkey
-
-#     monkey.patch_all()
-#     print("✅ Gevent monkey patching applied.")
-# except ImportError:
-#     print("⚠️ Gevent not found. Skipping monkey patching.")
-# -----------------------------
 
 from spotipy.oauth2 import SpotifyOAuth
-import spotipy
 from flask import request, redirect
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-import json
 import os
 
 # 모니터링 엔드포인트 를 위한 모듈 추가
@@ -27,9 +16,9 @@ import datetime
 
 # --- 모듈 임포트 ---
 # 각 모듈의 역할에 맞는 함수만 가져온다.
-from get_lyrics_save_firestore import process_playlist_and_save_to_firestore
-from lyrics_analyzer_firestore import process_lyrics
-from wc import generate_wordcloud_and_upload_to_gcs
+# from get_lyrics_save_firestore import process_playlist_and_save_to_firestore
+# from lyrics_analyzer_firestore import process_lyrics
+# from wc import generate_wordcloud_and_upload_to_gcs
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -122,6 +111,8 @@ def _get_song_data_from_firestore(doc_id: str, song_title: str) -> dict:
 # api_server.py에 추가 (05/23) -> firestore 업데이트에 맞춰 수정(10/15)
 @app.route("/crawl", methods=["POST"])
 def crawl_playlist():
+    from get_lyrics_save_firestore import process_playlist_and_save_to_firestore
+
     data = request.get_json()
     playlist_url = data.get("playlist_url")
     if not playlist_url:
@@ -146,6 +137,8 @@ def crawl_playlist():
 @app.route("/analyze/<string:doc_id>/<string:song_title>", methods=["GET"])
 def analyze_song(doc_id, song_title):
     """Firestore에서 특정 곡의 가사를 가져와 요약 및 키워드를 반환"""
+    from lyrics_analyzer_firestore import process_lyrics
+
     song_data = _get_song_data_from_firestore(doc_id, song_title)
     if not song_data:
         return jsonify({"error": "해당 곡을 찾을 수 없습니다."}), 404
@@ -166,6 +159,9 @@ def get_quizdata_from_firestore(doc_id):
     """
     Firestore 문서 ID를 기반으로 퀴즈 데이터를 생성하여 반환한다.
     """
+
+    from lyrics_analyzer_firestore import process_lyrics
+
     global db
     try:
         # Firestore에서 doc_id로 문서를 가져온다.
@@ -212,6 +208,8 @@ def get_quizdata_from_firestore(doc_id):
 @app.route("/wordcloud/<string:doc_id>/<string:song_title>", methods=["GET"])
 def get_wordcloud_for_song(doc_id, song_title):
     """Firestore에서 특정 곡의 정보를 가져와 워드클라우드를 생성하고 URL을 반환"""
+    from wc import generate_wordcloud_and_upload_to_gcs
+
     song_data = _get_song_data_from_firestore(doc_id, song_title)
     if not song_data:
         return jsonify({"error": "해당 곡을 찾을 수 없습니다."}), 404
