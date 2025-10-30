@@ -29,16 +29,26 @@ def create_app():
     app = Flask(__name__)
     CORS(app)  # CORS 설정은 app 생성 직후
 
-    # --- 함수 내부에서 Firebase 초기화 및 db 생성 ---
+    # # --- 함수 내부에서 Firebase 초기화 및 db 생성 ---
+    # try:
+    #     if not firebase_admin._apps:
+    #         cred = credentials.ApplicationDefault()
+    #         firebase_admin.initialize_app(cred)
+    #         print("✅ Firebase App initialized successfully inside create_app.")
+    #     # else: # 이미 초기화된 경우
+    #     #     print("ℹ️ Firebase App already initialized.")
+    # except Exception as e:
+    #     print(f"❌ Firebase App initialization failed inside create_app: {e}")
+
     try:
         if not firebase_admin._apps:
-            cred = credentials.ApplicationDefault()
-            firebase_admin.initialize_app(cred)
-            print("✅ Firebase App initialized successfully inside create_app.")
-        # else: # 이미 초기화된 경우
-        #     print("ℹ️ Firebase App already initialized.")
+            # 인수 없이 초기화
+            # 1. 로컬: GOOGLE_APPLICATION_CREDENTIALS 환경 변수(.env)를 찾아 JSON 키로 인증
+            # 2. Cloud Run: 환경 변수가 없으므로 ADC를 사용해 서비스 계정으로 자동 인증
+            firebase_admin.initialize_app()
+            print("✅ Firebase App initialized successfully (from module).")
     except Exception as e:
-        print(f"❌ Firebase App initialization failed inside create_app: {e}")
+        print(f"❌ Firebase App initialization failed in module: {e}")
 
     # Firestore 클라이언트는 함수 내에서 또는 전역으로 접근 가능하게 설정
     # 여기서는 간단하게 전역 변수로 설정 (다른 방법도 가능)

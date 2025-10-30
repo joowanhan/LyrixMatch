@@ -207,13 +207,24 @@ def main(doc_id: str, top_k: int = 10) -> None:
     import firebase_admin
     from firebase_admin import credentials, firestore
 
+    # try:
+    #     if not firebase_admin._apps:
+    #         cred = credentials.ApplicationDefault()
+    #         firebase_admin.initialize_app(cred)
+    #         print("✅ (Main) Firebase App initialized successfully.")
+    # except Exception as e:
+    #     print(f"❌ (Main) Firebase App initialization failed: {e}")
+
     try:
         if not firebase_admin._apps:
-            cred = credentials.ApplicationDefault()
-            firebase_admin.initialize_app(cred)
-            print("✅ (Main) Firebase App initialized successfully.")
+            # 인수 없이 초기화
+            # 1. 로컬: GOOGLE_APPLICATION_CREDENTIALS 환경 변수(.env)를 찾아 JSON 키로 인증
+            # 2. Cloud Run: 환경 변수가 없으므로 ADC를 사용해 서비스 계정으로 자동 인증
+            firebase_admin.initialize_app()
+            print("✅ Firebase App initialized successfully (from module).")
     except Exception as e:
-        print(f"❌ (Main) Firebase App initialization failed: {e}")
+        print(f"❌ Firebase App initialization failed in module: {e}")
+
     db = firestore.client()
     # ---------------------------------------------------
 

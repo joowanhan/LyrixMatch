@@ -55,16 +55,14 @@ from firebase_admin import firestore
 
 # Firebase 앱 초기화
 try:
-    # 인수 없이 초기화
-    # 1. 로컬: GOOGLE_APPLICATION_CREDENTIALS 환경 변수(.env)를 찾아 JSON 키로 인증
-    # 2. Cloud Run: 환경 변수가 없으므로 ADC를 사용해 서비스 계정으로 자동 인증
-    firebase_admin.initialize_app()
-    print("✅ Firebase App initialized successfully using ADC.")
-except Exception as e:
-    print(f"❌ Firebase App initialization failed: {e}")
-    # 이미 초기화된 경우를 대비한 예외 처리
     if not firebase_admin._apps:
+        # 인수 없이 초기화
+        # 1. 로컬: GOOGLE_APPLICATION_CREDENTIALS 환경 변수(.env)를 찾아 JSON 키로 인증
+        # 2. Cloud Run: 환경 변수가 없으므로 ADC를 사용해 서비스 계정으로 자동 인증
         firebase_admin.initialize_app()
+        print("✅ Firebase App initialized successfully (from module).")
+except Exception as e:
+    print(f"❌ Firebase App initialization failed in module: {e}")
 
 db = firestore.client()
 
