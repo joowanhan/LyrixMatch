@@ -30,10 +30,10 @@ load_dotenv()  # Cloud Run에는 .env 파일이 없으므로 이 라인은 무�
 DEEPL_KEY = os.environ.get("DEEPL_KEY")
 BART_PATH = "./models/bart"
 T5_PATH = "./models/eenzeenee_t5"
-# KOBART_PATH = "./models/kobart"
 
-nltk.download("stopwords", quiet=True)
-nltk.download("punkt", quiet=True)
+# Cloud Run 컨테이너는 읽기 전용(read-only) 파일 시스템으로 실행되므로
+# nltk.download("stopwords", quiet=True)
+# nltk.download("punkt", quiet=True)
 # ────────────────────────────────
 
 # --- [변경] 모델/객체를 None으로 전역 선언 (Lazy Loading) ---

@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y \
     openjdk-11-jdk-headless \
     # fonts-nanum \
  && pip install --no-cache-dir -r requirements.txt \
+ # NLTK 데이터를 이미지 빌드 시점에 /usr/share/nltk_data 경로에 다운로드
+ && python -m nltk.downloader -d /usr/share/nltk_data stopwords punkt \
  && apt-get purge -y --auto-remove gcc python3-dev build-essential \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
