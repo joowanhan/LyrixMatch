@@ -41,6 +41,5 @@ COPY . .
 # Gunicorn을 사용하여 api_server.py 내부의 'app' 객체를 실행
 # Cloud Run이 주입하는 $PORT 환경 변수를 사용
 # [변경] --timeout 300 (Cloud Run 프로브 240초보다 길게)
-# CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gthread", "--threads", "4", "--timeout", "300", "api_server:app"]
-# [변경] -k gthread 와 --threads 옵션 제거 (기본 'sync' 워커 사용)
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--timeout", "300", "api_server:app"]
+# [변경] --threads 제거, --worker-connections 1000 추가
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "300", "api_server:app"]

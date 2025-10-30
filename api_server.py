@@ -1,4 +1,14 @@
 # api_server.py (Refactored)
+# --- [추가] Gevent 몽키 패치 ---
+# [중요] 이 코드는 다른 어떤 모듈(spotipy, flask 등)보다도 먼저 실행되어야 한다.
+try:
+    from gevent import monkey
+
+    monkey.patch_all()
+    print("✅ Gevent monkey patching applied.")
+except ImportError:
+    print("⚠️ Gevent not found. Skipping monkey patching.")
+# -----------------------------
 
 from spotipy.oauth2 import SpotifyOAuth
 import spotipy
