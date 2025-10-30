@@ -42,4 +42,7 @@ COPY . .
 # Cloud Run이 주입하는 $PORT 환경 변수를 사용
 # [변경] --preload 플래그를 추가한다.
 # -k gthread 추가
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gthread", "--threads", "8", "--timeout", "0", "--preload", "api_server:app"]
+# CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gthread", "--threads", "8", "--timeout", "0", "--preload", "api_server:app"]
+
+# [변경] -k gthread 와 --threads 옵션 제거 (sync 워커 사용)
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--timeout", "0", "--preload", "api_server:app"]

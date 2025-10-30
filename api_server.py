@@ -247,6 +247,8 @@ def spotify_callback():
 @app.route("/health", methods=["GET"])
 def health_check():
     """서버가 정상적으로 실행 중인지 간단히 확인"""
+    # [추가] Cloud Run 시작 프로브가 이 함수를 호출하는지 확인하기 위한 로그
+    print("🩺 [Health Check] /health probe received by Flask app!")
     return jsonify({"status": "ok"}), 200
 
 
