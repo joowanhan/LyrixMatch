@@ -41,4 +41,5 @@ COPY . .
 # Gunicorn을 사용하여 api_server.py 내부의 'app' 객체를 실행
 # Cloud Run이 주입하는 $PORT 환경 변수를 사용
 # [변경] --preload 플래그를 추가한다.
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--threads", "8", "--timeout", "0", "--preload", "api_server:app"]
+# -k gthread 추가
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gthread", "--threads", "8", "--timeout", "0", "--preload", "api_server:app"]
