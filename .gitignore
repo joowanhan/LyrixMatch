@@ -26,3 +26,7 @@ genius_test.py
 
 # log
 failed_searches.log
+
+# venv
+lyrixmatch1/
+.lyrixmatch1/
