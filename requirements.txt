@@ -20,7 +20,7 @@ firebase-admin
 google-cloud-storage
 python-dotenv
 
-psutil
+# psutil
 
 # 프로덕션 레벨 WSGI 서버 추가
 # gunicorn

@@ -8,10 +8,8 @@ from dotenv import load_dotenv
 import os
 
 # 모니터링 엔드포인트 를 위한 모듈 추가
-# 시스템의 자원(메모리 등)을 확인하기 위한 psutil
 # 최근 요청 기록을 효율적으로 관리하기 위한 collections.deque
 from collections import deque
-import psutil
 import datetime
 
 # --- 모듈 임포트 ---
@@ -264,6 +262,10 @@ def health_check():
 @app.route("/debug", methods=["GET"])
 def debug_info():
     """서버의 상세한 내부 상태 정보 제공"""
+
+    # 시스템의 자원(메모리 등)을 확인하기 위한 psutil
+    # import psutil
+
     global db
     global recent_requests
     # 1. Firestore 연결 상태 확인
@@ -275,7 +277,7 @@ def debug_info():
         firestore_status = f"disconnected - {str(e)}"
 
     # 2. 메모리 사용량 확인
-    memory_usage = psutil.virtual_memory().percent
+    # memory_usage = psutil.virtual_memory().percent
 
     # 3. 'failed_searches.log' 파일 최근 5줄 읽기
     failed_log_content = []
@@ -292,7 +294,7 @@ def debug_info():
     debug_data = {
         "server_time": datetime.datetime.now().isoformat(),
         "firestore_status": firestore_status,
-        "system_memory_usage_percent": memory_usage,
+        # "system_memory_usage_percent": memory_usage,
         "recent_requests": list(recent_requests),
         "failed_searches_log": list(failed_log_content),
     }
