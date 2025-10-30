@@ -1,5 +1,6 @@
 # --- 1. Base Image ---
-FROM python:3.10-slim
+# FROM python:3.10-slim
+FROM python:3.10-slim-bullseye
 
 # --- 2. Environment Variables ---
 ENV PYTHONDONTWRITEBYTECODE=1 \
