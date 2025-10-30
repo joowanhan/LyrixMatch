@@ -26,22 +26,44 @@ from firebase_admin import credentials, firestore
 
 # .env 로드 및 Firebase 앱 초기화
 load_dotenv()
-try:
-    if not firebase_admin._apps:
-        # GOOGLE_APPLICATION_CREDENTIALS 환경변수를 사용한 기본 초기화
-        cred = credentials.ApplicationDefault()
-        firebase_admin.initialize_app(cred)
-        print("✅ Firebase App initialized successfully.")
-except Exception as e:
-    print(f"❌ Firebase App initialization failed: {e}")
-db = firestore.client()
 
 
-app = Flask(__name__)
-CORS(app)  # Flutter에서 요청할 수 있게 허용
+# [변경] Flask 앱 생성 부분을 함수로 감싼다 (앱 팩토리 패턴)
+def create_app():
+    app = Flask(__name__)
+    CORS(app)  # CORS 설정은 app 생성 직후
 
-# ───── 최근 요청 5개를 저장하기 위한 전역 변수 추가 ─────
-recent_requests = deque(maxlen=5)
+    # --- 함수 내부에서 Firebase 초기화 및 db 생성 ---
+    try:
+        if not firebase_admin._apps:
+            cred = credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase App initialized successfully inside create_app.")
+        # else: # 이미 초기화된 경우
+        #     print("ℹ️ Firebase App already initialized.")
+    except Exception as e:
+        print(f"❌ Firebase App initialization failed inside create_app: {e}")
+
+    # Firestore 클라이언트는 함수 내에서 또는 전역으로 접근 가능하게 설정
+    # 여기서는 간단하게 전역 변수로 설정 (다른 방법도 가능)
+    global db
+    db = firestore.client()
+    # -------------------------------------------------
+
+    # ----- 최근 요청 deque는 그대로 유지 -----
+    global recent_requests
+    recent_requests = deque(maxlen=5)
+    # ----------------------------------------
+
+    return app  # 생성된 Flask 앱 객체 반환
+
+
+# 전역 변수로 db 선언 (create_app 내부에서 할당됨)
+db = None
+recent_requests = deque(maxlen=5)  # 초기화
+
+# Flask 앱 인스턴스 생성 (Gunicorn이 이 'app' 변수를 찾음)
+app = create_app()
 
 
 # ──────────────────────────────────────────────────
@@ -49,6 +71,7 @@ recent_requests = deque(maxlen=5)
 # 모든 요청이 실행되기 전에 로그를 기록한다.
 @app.before_request
 def log_request_info():
+    global recent_requests
     # /debug 엔드포인트 자체에 대한 요청은 기록에서 제외하여 순환을 방지한다.
     if request.path != "/debug":
         recent_requests.append(
@@ -65,6 +88,7 @@ def log_request_info():
 # 헬퍼 함수: Firestore에서 특정 곡을 찾는 중복 코드를 하나의 함수로 통합
 def _get_song_data_from_firestore(doc_id: str, song_title: str) -> dict:
     """Firestore에서 특정 곡의 데이터를 찾아 반환하는 헬퍼 함수"""
+    global db
     doc_ref = db.collection("user_playlists").document(doc_id)
     doc = doc_ref.get()
 
@@ -133,6 +157,7 @@ def get_quizdata_from_firestore(doc_id):
     """
     Firestore 문서 ID를 기반으로 퀴즈 데이터를 생성하여 반환한다.
     """
+    global db
     try:
         # Firestore에서 doc_id로 문서를 가져온다.
         doc_ref = db.collection("user_playlists").document(doc_id)
@@ -230,7 +255,8 @@ def health_check():
 @app.route("/debug", methods=["GET"])
 def debug_info():
     """서버의 상세한 내부 상태 정보 제공"""
-
+    global db
+    global recent_requests
     # 1. Firestore 연결 상태 확인
     try:
         # 간단한 데이터 읽기 시도를 통해 실제 연결 유효성을 검사한다.
