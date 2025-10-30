@@ -55,4 +55,3 @@ LyrixMatch는 **클라이언트-서버 구조**를 따릅니다.
 -   `GET /wordcloud/<doc_id>/<song_title>`: 특정 곡의 워드클라우드 이미지를 생성하여 GCS에 업로드하고 해당 URL을 반환합니다.
 -   `GET /health`: 서버의 기본 상태를 확인합니다.
 -   `GET /debug`: 서버의 상세 디버그 정보(메모리, Firestore 연결 상태 등)를 반환합니다.
--   
