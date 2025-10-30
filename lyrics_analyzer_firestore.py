@@ -3,8 +3,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import torch
-from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
+
 import argparse
 import json
 import os
@@ -14,7 +13,6 @@ from typing import List, Tuple
 import nltk
 import deepl
 from sklearn.feature_extraction.text import CountVectorizer
-from konlpy.tag import Okt
 
 # ────────────────────────────────
 # --- 경고 메시지 숨기기 ---
@@ -71,6 +69,9 @@ def detect_language(text: str, hangul_weight: float = 0.5) -> str:
 
 def summarize_en(text: str, max_len: int = 90, min_len: int = 25) -> str:
     global _summarizer_bart_pipeline  # 전역 변수 사용 선언
+    # [추가] 라이브러리 임포트를 함수 내부로 이동
+    import torch
+    from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
 
     # [추가] 모델이 로드되지 않았으면 지금 로드
     if _summarizer_bart_pipeline is None:
@@ -94,6 +95,10 @@ def summarize_en(text: str, max_len: int = 90, min_len: int = 25) -> str:
 
 def summarize_ko(text: str, max_len: int = 64, min_len: int = 10) -> str:
     global _tokenizer_t5, _model_t5  # 전역 변수 사용 선언
+
+    # [추가] 라이브러리 임포트를 함수 내부로 이동
+    import torch
+    from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
 
     # [추가] 모델이 로드되지 않았으면 지금 로드
     if _tokenizer_t5 is None or _model_t5 is None:
@@ -166,6 +171,8 @@ def keywords_en(text: str, top_k: int = 10) -> List[str]:
 def keywords_ko(text: str, top_k: int = 10) -> List[str]:
 
     global _okt
+    # [추가] 라이브러리 임포트를 함수 내부로 이동
+    from konlpy.tag import Okt
 
     # [추가] Okt가 로드되지 않았으면 지금 로드
     if _okt is None:
