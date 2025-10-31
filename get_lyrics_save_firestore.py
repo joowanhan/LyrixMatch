@@ -348,10 +348,10 @@ if __name__ == "__main__":
     # test_playlist_url = "https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ"
 
     # 테스트용 플레이리스트 URL - 3 songs
-    # test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
+    test_playlist_url = "https://open.spotify.com/playlist/0BLpwcj2ShVelGnbsmH7lW"
 
     # 테스트용 플레이리스트 URL - 30songs
-    test_playlist_url = "https://open.spotify.com/playlist/1X6xWFKgyzHeWCeznKkkkx"
+    # test_playlist_url = "https://open.spotify.com/playlist/1X6xWFKgyzHeWCeznKkkkx"
 
     match = re.search(r"playlist/([a-zA-Z0-9]+)", test_playlist_url)
     if match:

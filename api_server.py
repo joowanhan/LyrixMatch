@@ -312,6 +312,32 @@ def debug_info():
     return jsonify(debug_data)
 
 
+# --- [임시 디버그용] ---
+@app.route("/debug-env", methods=["GET"])
+def debug_env():
+    # Secret Manager에서 참조한 키들
+    spotify_id = os.environ.get("SPOTIFY_CLIENT_ID")
+    spotify_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
+    genius_token = os.environ.get("GENIUS_TOKEN")
+
+    # .get()의 결과가 None인지, 아니면 실제 값이 문자열로 들어왔는지 확인
+    return (
+        jsonify(
+            {
+                "SPOTIFY_CLIENT_ID_IS_SET": spotify_id is not None
+                and len(spotify_id) > 0,
+                "SPOTIFY_CLIENT_SECRET_IS_SET": spotify_secret is not None
+                and len(spotify_secret) > 0,
+                "GENIUS_TOKEN_IS_SET": genius_token is not None
+                and len(genius_token) > 0,
+            }
+        ),
+        200,
+    )
+
+
+# --- [ /임시 디버그용] ---
+
 # ────────────────────────────────
 if __name__ == "__main__":
     # Cloud Run과 같은 관리형 환경에서는 gunicorn을 사용하므로,
