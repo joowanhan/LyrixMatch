@@ -117,26 +117,79 @@ def _get_song_data_from_firestore(doc_id: str, song_title: str) -> dict:
 
 
 # api_server.py에 추가 (05/23) -> firestore 업데이트에 맞춰 수정(10/15)
+# @app.route("/crawl", methods=["POST"])
+# def crawl_playlist():
+#     from get_lyrics_save_firestore import process_playlist_and_save_to_firestore
+
+#     data = request.get_json()
+#     playlist_url = data.get("playlist_url")
+#     if not playlist_url:
+#         return jsonify({"error": "Missing playlist_url"}), 400
+
+#     try:
+#         # Firestore에 저장 후 고유 문서 ID를 반환받는다.
+#         doc_id = process_playlist_and_save_to_firestore(playlist_url)
+#         if doc_id:
+#             # 클라이언트에게 이 ID를 전달한다.
+#             return jsonify({"doc_id": doc_id}), 200
+#         else:
+#             return jsonify({"error": "플레이리스트 처리 중 서버 오류 발생"}), 500
+#     except Exception as e:
+#         print(f"Error during crawl: {e}")  # 디버깅을 위한 로그 추가
+#         return jsonify({"error": f"처리 중 오류: {str(e)}"}), 500
+
+# api_server.py에 이 코드로 교체 (또는 추가)
+
+
 @app.route("/crawl", methods=["POST"])
 def crawl_playlist():
+    # 1. 비즈니스 로직 함수 임포트
     from get_lyrics_save_firestore import process_playlist_and_save_to_firestore
 
+    # 2. 클라이언트 요청 데이터 유효성 검사 (JSON 본문)
     data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid request: Missing JSON body"}), 400
+
+    # 3. 클라이언트 요청 데이터 유효성 검사 (필수 키)
     playlist_url = data.get("playlist_url")
     if not playlist_url:
-        return jsonify({"error": "Missing playlist_url"}), 400
+        return jsonify({"error": "Invalid request: Missing 'playlist_url' key"}), 400
 
     try:
-        # Firestore에 저장 후 고유 문서 ID를 반환받는다.
+        # 4. 핵심 비즈니스 로직 실행
+        # (이 함수 내부에서 URL 형식 검사(ValueError) 및 Spotipy/Genius/Firestore 작업 수행)
         doc_id = process_playlist_and_save_to_firestore(playlist_url)
+
+        # 5. 로직 실행 후 결과 검사 (성공)
         if doc_id:
-            # 클라이언트에게 이 ID를 전달한다.
             return jsonify({"doc_id": doc_id}), 200
+
+        # 6. 로직 실행 후 결과 검사 (알 수 없는 실패)
         else:
-            return jsonify({"error": "플레이리스트 처리 중 서버 오류 발생"}), 500
+            # 예외는 없었으나, 함수가 None을 반환한 경우 (e.g., Firestore 저장 실패)
+            print(
+                "Error during crawl: process_playlist_and_save_to_firestore returned None"
+            )
+            return (
+                jsonify({"error": "플레이리스트 처리 중 서버 오류 발생 (Code: N-1)"}),
+                500,
+            )
+
+    # 7. 예외 처리 (클라이언트 입력 오류)
+    except ValueError as ve:
+        # process_playlist_and_save_to_firestore가 "잘못된 URL"로 raise한 경우
+        #
+        print(f"Client Error during crawl: {ve}")
+        # 500 (서버 오류)가 아닌 400 (클라이언트 요청 오류) 반환
+        return jsonify({"error": f"잘못된 입력: {str(ve)}"}), 400
+
+    # 8. 예외 처리 (서버 내부 오류)
     except Exception as e:
-        print(f"Error during crawl: {e}")  # 디버깅을 위한 로그 추가
-        return jsonify({"error": f"처리 중 오류: {str(e)}"}), 500
+        # Spotipy API 인증 오류 (Invalid base62 id 등), Genius 타임아웃,
+        # Firestore API 비활성화 등 예측하지 못한 모든 '서버 측' 오류
+        print(f"Internal Server Error during crawl: {e}")  # 디버깅을 위한 로그
+        return jsonify({"error": f"서버 내부 처리 중 오류: {str(e)}"}), 500
 
 
 # ────────────────────────────────
@@ -337,6 +390,68 @@ def debug_env():
 
 
 # --- [ /임시 디버그용] ---
+
+
+# --- [신규] Spotify 인증 테스트용 디버그 엔드포인트 ---
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+import os
+
+
+@app.route("/debug-spotify", methods=["GET"])
+def debug_spotify_connection():
+    try:
+        # 1. 환경 변수(API 키)를 불러온다.
+        client_id = os.environ.get("SPOTIFY_CLIENT_ID")
+        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
+
+        if not client_id or not client_secret:
+            return (
+                jsonify(
+                    {
+                        "status": "failed",
+                        "message": "Error: SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET is not set in environment.",
+                    }
+                ),
+                400,
+            )
+
+        # 2. Spotipy 클라이언트 인증을 시도한다. (Client Credentials Flow)
+        auth_manager = SpotifyClientCredentials(
+            client_id=client_id, client_secret=client_secret
+        )
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+
+        # 3. 인증 테스트를 위해 실제 API를 호출한다. (가장 가벼운 요청)
+        playlist_id = "295349rZbeojC5YHpA5WlV"
+        test_call = sp.playlist_items(playlist_id, fields="items(track(name))", limit=1)
+
+        # 4. API 호출에 성공하면 인증 성공
+        first_track_name = test_call["items"][0]["track"]["name"]
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "Spotify API authentication successful.",
+                    "test_playlist_name": "song1test",
+                    "fetched_track_name": first_track_name,
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        # 5. 인증 실패 또는 API 호출 실패 시
+        print(f"[Debug Spotify Error] {e}")
+        return (
+            jsonify(
+                {"status": "failed", "message": f"Spotify connection failed: {str(e)}"}
+            ),
+            500,
+        )
+
+
+# --- [ /신규 디버그 엔드포인트 ] ---
 
 # ────────────────────────────────
 if __name__ == "__main__":
