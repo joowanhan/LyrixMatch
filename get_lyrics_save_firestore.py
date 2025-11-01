@@ -268,7 +268,7 @@ def process_playlist_and_save_to_firestore(playlist_url: str) -> str:
     Spotify 플레이리스트 URL을 받아 ID를 추출하고,
     가사 수집 및 전처리 후 Firestore에 저장하고 문서 ID를 반환한다.
     """
-    playlist_id_match = re.search(r"playlist/([a-zA-Z0_9]+)", playlist_url)
+    playlist_id_match = re.search(r"playlist/([a-zA-Z0-9]+)", playlist_url)
     if not playlist_id_match:
         raise ValueError("잘못된 Spotify 플레이리스트 URL입니다.")
 
