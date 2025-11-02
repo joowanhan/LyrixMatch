@@ -211,11 +211,23 @@ def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
 # --- [변경] get_lyrics 함수를 ThreadPoolExecutor를 사용하도록 수정 ---
 def get_lyrics(tracks: list[dict]) -> list[dict]:
     """Genius API 여러 패턴으로 검색 → 가사 클린 (ThreadPoolExecutor 사용)"""
+    PROXY_URL = os.environ.get("PROXY_URL")
+    proxies = None
+    if PROXY_URL:
+        proxies = {
+            "http": PROXY_URL
+            # "https": PROXY_URL
+        }
+        print(f"✅ [Proxy] 프록시 설정을 사용합니다: {PROXY_URL.split('@')[-1]}")
+    else:
+        print("ℹ️ [Proxy] 프록시 설정을 사용하지 않습니다 (직접 연결).")
+
     genius = lyricsgenius.Genius(
         GENIUS_TOKEN,
         timeout=15,
         retries=3,  # 라이브러리 자체 재시도 (429 외의 오류에 도움됨)
         remove_section_headers=True,
+        proxy=proxies,
     )
 
     MAX_WORKERS = 10

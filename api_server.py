@@ -391,11 +391,10 @@ def debug_env():
 
 # --- [ /임시 디버그용] ---
 
-
+# ────────────────────────────────
 # --- [신규] Spotify 인증 테스트용 디버그 엔드포인트 ---
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
-import os
 
 
 @app.route("/debug-spotify", methods=["GET"])

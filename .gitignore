@@ -22,7 +22,8 @@ __pycache__/
 
 # for backup and test
 get_lyrics_save_firestore_uniprocess.py
-genius_test.py
+test_*.py
+
 
 # log
 failed_searches.log
