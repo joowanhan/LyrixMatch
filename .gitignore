@@ -23,6 +23,7 @@ __pycache__/
 # for backup and test
 get_lyrics_save_firestore_uniprocess.py
 test_*.py
+copy*_*.py
 
 
 # log
