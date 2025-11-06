@@ -17,12 +17,13 @@ import spotipy  # pip install spotipy
 # from spotipy.oauth2 import SpotifyOAuth
 from spotipy.oauth2 import SpotifyClientCredentials
 import lyricsgenius  # pip install lyricsgenius
+import requests
 
 # ────────────────────────────────
-# --- [변경] 병렬 처리를 위한 모듈 추가 ---
+# --- 병렬 처리를 위한 모듈 추가 ---
 import concurrent.futures
 from itertools import repeat
-import random  # <-- [추가] 무작위 샘플링을 위한 모듈
+import random  # <-- 무작위 샘플링을 위한 모듈
 
 # ────────────────────────────────
 
@@ -144,7 +145,7 @@ def clean_genius_lyrics(raw_lyrics: str | None) -> str | None:
 
 
 # ────────────────────────────────
-# --- [변경] 429 오류 대응을 위한 지수 백오프(Exponential Backoff) 로직 추가 ---
+# --- 429 오류 대응을 위한 지수 백오프(Exponential Backoff) 로직 추가 ---
 def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
     """트랙 1개에 대해 Genius API 검색 및 가사 추출 (스레드 작업용 + 429 재시도)"""
 
@@ -207,22 +208,38 @@ def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
     }
 
 
-# --- [변경] get_lyrics 함수를 ThreadPoolExecutor를 사용하도록 수정 ---
+# --- get_lyrics 함수를 ThreadPoolExecutor를 사용하도록 수정 ---
 def get_lyrics(tracks: list[dict]) -> list[dict]:
     """Genius API 여러 패턴으로 검색 → 가사 클린 (ThreadPoolExecutor 사용)"""
     PROXY_URL = os.environ.get("PROXY_URL")
     proxies = None
+    ip_used = "not_checked"  # IP 저장 변수
     if PROXY_URL:
-        proxies = {
-            "http": PROXY_URL
-            # "https": PROXY_URL
-        }
+        proxies = {"http": PROXY_URL, "https": PROXY_URL}
         print(f"✅ [Proxy] 프록시 설정을 사용합니다: {PROXY_URL.split('@')[-1]}")
+        try:
+            # 프록시를 통해 현재 IP 확인 (타임아웃 10초)
+            r = requests.get(
+                "https://api.ipify.org?format=json", proxies=proxies, timeout=10
+            )
+            ip_used = r.json().get("ip", "proxy_ip_check_error")
+            print(f"DEBUG: Proxy Outbound IP: {ip_used}")
+        except Exception as e:
+            print(f"DEBUG: Proxy IP Check Failed: {e}")
+            ip_used = "proxy_ip_check_failed"
     else:
         print("ℹ️ [Proxy] 프록시 설정을 사용하지 않습니다 (직접 연결).")
+        try:
+            # 프록시 없이 현재 IP 확인 (타임아웃 5초)
+            r = requests.get("https://api.ipify.org?format=json", timeout=5)
+            ip_used = r.json().get("ip", "direct_ip_check_error")
+            print(f"DEBUG: Direct Outbound IP: {ip_used}")
+        except Exception as e:
+            print(f"DEBUG: Direct IP Check Failed: {e}")
+            ip_used = "direct_ip_check_failed"
 
     user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
-    # print(f"✅ user_agent 설정을 사용합니다: {user_agent}")
+    print(f"✅ user_agent 설정을 사용합니다: {user_agent}")
 
     genius = lyricsgenius.Genius(
         GENIUS_TOKEN,
@@ -244,7 +261,7 @@ def get_lyrics(tracks: list[dict]) -> list[dict]:
         # list()로 감싸서 모든 스레드 작업이 완료되고 결과를 수집할 때까지 대기
         out = list(executor.map(fetch_single_lyric, tracks, repeat(genius)))
 
-    return out
+    return out, ip_used
 
 
 # ────────────────────────────────
@@ -310,7 +327,7 @@ def main(playlist_id: str) -> str:
         print("❌ 트랙 수집 실패")
         return None  # 실패 시 None 반환 명시
 
-    # --- [추가] 플레이리스트 트랙 수 제한 로직 ---
+    # --- 플레이리스트 트랙 수 제한 로직 ---
     MAX_TRACKS_LIMIT = 30
     original_track_count = len(tracks)
     if original_track_count > MAX_TRACKS_LIMIT:
@@ -322,7 +339,7 @@ def main(playlist_id: str) -> str:
     # Genius 가사 수집 + 1차 전처리 적용
     # [수정] 제한된 tracks 리스트의 길이를 사용하도록 변경
     print(f"✅ {len(tracks)}개 트랙 처리 시작 — Genius 가사 검색")
-    songs = get_lyrics(tracks)
+    songs, ip_used = get_lyrics(tracks)  # [수정] get_lyrics가 IP도 반환하도록 변경
 
     # 2차 전처리 적용
     print("💅 가사 전처리 진행중…")
@@ -342,8 +359,9 @@ def main(playlist_id: str) -> str:
                 "playlistId": playlist_id,
                 "tracks": songs,
                 "createdAt": firestore.SERVER_TIMESTAMP,  # 서버 시간 기준 생성 타임스탬프 기록
-                "originalTrackCount": original_track_count,  # [추가] 원본 트랙 수 기록
-                "processedTrackCount": len(songs),  # [추가] 실제 처리된 트랙 수 기록
+                "originalTrackCount": original_track_count,  # 원본 트랙 수 기록
+                "processedTrackCount": len(songs),  # 실제 처리된 트랙 수 기록
+                "requestIp": ip_used,  # 요청 IP 주소 저장
             }
         )
 
@@ -373,7 +391,7 @@ if __name__ == "__main__":
         playlist_id = match.group(1)
         main(playlist_id)
     else:
-        # --- [추가] URL에서 ID를 찾지 못했을 경우 에러 메시지 ---
+        # --- URL에서 ID를 찾지 못했을 경우 에러 메시지 ---
         print(
             f"❌ '{test_playlist_url}'에서 플레이리스트 ID를 추출할 수 없습니다. URL 형식을 확인하세요."
         )
