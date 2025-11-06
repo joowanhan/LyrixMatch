@@ -144,11 +144,11 @@ def clean_genius_lyrics(raw_lyrics: str | None) -> str | None:
 
 
 # ────────────────────────────────
-# --- 429 오류 대응을 위한 지수 백오프(Exponential Backoff) 로직 추가 ---
+# --- [변경] 429 오류 대응을 위한 지수 백오프(Exponential Backoff) 로직 추가 ---
 def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
     """트랙 1개에 대해 Genius API 검색 및 가사 추출 (스레드 작업용 + 429 재시도)"""
 
-    # --- 재시도 로직을 위한 상수 ---
+    # --- [신규] 재시도 로직을 위한 상수 ---
     MAX_RETRIES = 3  # 최대 재시도 횟수
     BASE_BACKOFF = 5  # 기본 대기 시간 (초). 5초, 10초, 20초로 증가.
     # ────────────────────────────────
@@ -157,82 +157,21 @@ def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
     ori_artist = t["artist"]
     exp_artist = expand_artists(ori_artist, ori_title)
 
-    # 가장 구체적인 검색 (원본 제목)을 먼저 수행하도록 순서 변경
     attempts = [
-        (
-            ori_title,
-            exp_artist,
-        ),  # 1. "Save Your Tears (with...)", "The Weeknd Ariana Grande"
-        (ori_title, ori_artist),  # 2. "Save Your Tears (with...)", "The Weeknd"
-        (clean_title, exp_artist),  # 3. "Save Your Tears", "The Weeknd Ariana Grande"
-        (clean_title, ori_artist),  # 4. "Save Your Tears", "The Weeknd"
+        (clean_title, ori_artist),
+        (clean_title, exp_artist),
+        (ori_title, ori_artist),
+        (ori_title, exp_artist),
     ]
 
-    # [수정] song 객체가 아닌 song_lyrics 문자열을 저장할 변수
-    song_lyrics = None
-
+    song = None
     for title, artist in attempts:
-        if song_lyrics:
-            break
-
+        # --- [신규] 429 오류 대응을 위한 재시도 루프 ---
         for i in range(MAX_RETRIES):
-            if song_lyrics:
-                break
-
             try:
-                search_results = genius.search_songs(f"{artist} {title}")
-
-                if search_results and "hits" in search_results:
-                    print(
-                        f"DEBUG: Attempt '{artist} - {title}'. Found {len(search_results['hits'])} hits."
-                    )
-                    for j, hit in enumerate(search_results["hits"][:5]):
-                        song_info = hit["result"]
-                        print(
-                            f"  > Hit {j}: {song_info['title']} (Artist: {song_info['primary_artist']['name']}, ID: {song_info['id']})"
-                        )
-                else:
-                    print(f"DEBUG: Attempt '{artist} - {title}'. No hits found.")
-
-                if search_results and "hits" in search_results:
-                    for hit in search_results["hits"]:
-                        song_info = hit["result"]
-
-                        artist_match = (
-                            ori_artist.lower()
-                            in song_info["primary_artist"]["name"].lower()
-                        )
-                        title_match_1 = song_info["title"].lower() in title.lower()
-                        title_match_2 = title.lower() in song_info["title"].lower()
-
-                        if artist_match and (title_match_1 or title_match_2):
-                            song_id = song_info["id"]
-                            print(
-                                f"DEBUG: Match found! Checking ID: {song_id} (Title: {song_info['title']})"
-                            )
-
-                            # [ --- 💥 핵심 로직 수정 💥 --- ]
-                            # genius.song() 대신 genius.lyrics()를 사용하여 스크래핑 시도
-
-                            # genius.lyrics()는 가사(str)를 반환하거나, 실패 시 None을 반환
-                            scraped_lyrics = genius.lyrics(song_id)
-
-                            if scraped_lyrics:
-                                # 3. 가사 발견! -> 성공
-                                song_lyrics = scraped_lyrics
-                                print(
-                                    f"DEBUG: Lyrics extracted successfully for ID: {song_id} (via .lyrics scrape)"
-                                )
-                                break  # 'for hit in...' 루프 탈출
-                            else:
-                                # 3. 가사 없음 -> 이 hit는 무시하고 다음 hit 검색
-                                print(
-                                    f"DEBUG: ID {song_id} matched, but .lyrics() returned None. Checking next hit..."
-                                )
-
-                    if song_lyrics:
-                        break  # 'for i in range(MAX_RETRIES)...' 루프 탈출
-
+                song = genius.search_song(title, artist)
+                if song:
+                    break  # --- [성공] 재시도 루프(inner loop) 탈출
             except Exception as e:
                 if "[Errno 429]" in str(e) or "[Errno 403]" in str(e):
                     error_code = 429 if "429" in str(e) else 403
@@ -245,9 +184,11 @@ def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
                     print(f"[Genius 검색/스크래핑 오류] {title} - {artist} :: {e}")
                     break
 
-    # [수정] song.lyrics가 아닌 song_lyrics 변수를 사용 (AttributeError 해결)
-    if song_lyrics:
-        lyrics = clean_genius_lyrics(song_lyrics)
+        if song:
+            break  # --- [성공] 검색어 시도 루프(outer loop) 탈출
+
+    if song:
+        lyrics = clean_genius_lyrics(song.lyrics)
     else:
         lyrics = None
         # 스레드 환경에서 파일 쓰기. 'a'(append) 모드는 대부분 원자적(atomic)으로 동작하나,
@@ -270,7 +211,6 @@ def fetch_single_lyric(t: dict, genius: lyricsgenius.Genius) -> dict:
 def get_lyrics(tracks: list[dict]) -> list[dict]:
     """Genius API 여러 패턴으로 검색 → 가사 클린 (ThreadPoolExecutor 사용)"""
     PROXY_URL = os.environ.get("PROXY_URL")
-    PROXY_URL = None
     proxies = None
     if PROXY_URL:
         proxies = {
@@ -281,7 +221,7 @@ def get_lyrics(tracks: list[dict]) -> list[dict]:
     else:
         print("ℹ️ [Proxy] 프록시 설정을 사용하지 않습니다 (직접 연결).")
 
-    # user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+    user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
     # print(f"✅ user_agent 설정을 사용합니다: {user_agent}")
 
     genius = lyricsgenius.Genius(
@@ -290,7 +230,7 @@ def get_lyrics(tracks: list[dict]) -> list[dict]:
         retries=3,  # 라이브러리 자체 재시도 (429 외의 오류에 도움됨)
         remove_section_headers=True,
         proxy=proxies,
-        # user_agent=user_agent,
+        user_agent=user_agent,
     )
 
     MAX_WORKERS = 10
