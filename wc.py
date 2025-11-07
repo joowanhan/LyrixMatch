@@ -111,13 +111,12 @@ def generate_wordcloud_and_upload_to_gcs(
     """
     try:
         # 1. GCS 클라이언트 초기화
-        gcs_credentials_path = os.getenv("GOOGLE_CLOUD_SERVICE_CREDENTIALS")
-        if not gcs_credentials_path:
-            raise ValueError(
-                "GOOGLE_CLOUD_SERVICE_CREDENTIALS 환경변수가 설정되지 않았습니다."
-            )
+        # [수정] storage.Client()는 ADC를 사용해
+        # 1. (로컬) GOOGLE_APPLICATION_CREDENTIALS 변수를 찾거나
+        # 2. (배포) 런타임 서비스 계정을 자동으로 사용함
 
-        storage_client = storage.Client.from_service_account_json(gcs_credentials_path)
+        storage_client = storage.Client()
+
         bucket_name = os.getenv("GCS_BUCKET_NAME")
         if not bucket_name:
             raise ValueError("GCS_BUCKET_NAME 환경변수가 설정되지 않았습니다.")
