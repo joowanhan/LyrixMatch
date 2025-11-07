@@ -1,7 +1,7 @@
 # .gitignore
 
-# Firebase 서비스 계정 키 파일
-*.json
+# 서비스 계정 키 파일
+key-*.json
 
 # 로컬 환경 변수 파일
 .env
