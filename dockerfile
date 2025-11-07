@@ -39,24 +39,19 @@ ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # --- 7. Copy Models ---
-COPY ./models/bart /app/models/bart
-COPY ./models/eenzeenee_t5 /app/models/eenzeenee_t5
+# [삭제] 8번 단계의 "COPY . ."가 모든 파일을 복사하므로 이 단계는 불필요.
+# COPY ./models/bart /app/models/bart
+# COPY ./models/eenzeenee_t5 /app/models/eenzeenee_t5
 
 # --- 8. Copy Fonts and Source Code ---
 COPY ./fonts /app/fonts
 COPY . .
 
+# --- [추가] LFS Pointer 파일을 실제 파일로 변환 ---
+# .dockerignore에서 .git을 제외했으므로, "COPY . ."가 .git 디렉토리를 복사함
+# 복사된 .git 정보를 바탕으로 LFS 파일을 다운로드함
+RUN git lfs pull
+
 # --- 9. Run App with Gunicorn (Production Server) ---
-# EXPOSE 8080은 Cloud Run에서 사용하지 않으므로 삭제
-# Gunicorn을 사용하여 api_server.py 내부의 'app' 객체를 실행
-# Cloud Run이 주입하는 $PORT 환경 변수를 사용
-
-# [변경] --threads 제거, --worker-connections 1000 추가
-# CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "300", "api_server:app"]
-
-# [변경] -k gevent (비동기 워커) 사용
-# [변경] --preload는 반드시 제거된 상태여야 함
-# [변경] --timeout 120초 (시작이 빠르므로 300초 불필요)
-# CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "-k", "gevent", "--worker-connections", "1000", "--timeout", "120", "api_server:app"]
 # [변경] Gunicorn CMD 대신 Python을 직접 실행
 CMD ["python", "api_server.py"]
