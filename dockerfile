@@ -16,7 +16,7 @@ COPY requirements.txt .
 # --- 5. Install Dependencies ---
 RUN apt-get update && apt-get install -y \
     gcc python3-dev build-essential \
-    curl git \
+    curl git git-lfs \
     libglib2.0-0 libsm6 libxext6 libxrender-dev ffmpeg \
     openjdk-11-jdk-headless \
     # fonts-nanum \
