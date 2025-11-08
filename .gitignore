@@ -24,7 +24,7 @@ __pycache__/
 get_lyrics_save_firestore_uniprocess.py
 test_*.py
 copy*_*.py
-
+copy_dockerfile.txt
 
 # log
 failed_searches.log
