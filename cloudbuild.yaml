@@ -1,21 +1,19 @@
 steps:
-# --- 1. LFS 설치 및 파일 다운로드 단계 ---
-  - name: 'alpine:3.18' # <-- git 빌더 대신 경량 OS 이미지 사용
-    entrypoint: 'sh'      # <-- bash 대신 sh 사용 (alpine 기본 쉘)
-    args:
-      - '-c'
-      - |
-        # 1. 패키지 매니저 업데이트 및 git, git-lfs 설치
-        apk update
-        apk add git
-        apk add git-lfs
+# --- 1. LFS Install 단계 ---
+# gcr.io/cloud-builders/git 빌더를 사용 (기본 entrypoint가 'git'임)
+# args로 ['lfs', 'install']을 전달하여 'git lfs install' 실행
+# 이 빌더는 Cloud Build의 GitHub 인증 정보를 자동으로 사용함
+  - name: 'gcr.io/cloud-builders/git'
+    args: ['lfs', 'install']
+    timeout: 120s
 
-        # 2. LFS 명령 실행
-        git lfs install
-        git lfs pull
-    timeout: 1200s
+# --- 2. LFS Pull 단계 ---
+# 동일한 빌더를 사용하여 'git lfs pull' 실행
+  - name: 'gcr.io/cloud-builders/git'
+    args: ['lfs', 'pull']
+    timeout: 1200s # LFS 파일 다운로드를 위해 넉넉한 타임아웃 설정
 
-# --- 2. Docker Build 단계 ---
+# --- 3. Docker Build 단계 ---
   - name: gcr.io/cloud-builders/docker
     args:
       - build
@@ -23,16 +21,16 @@ steps:
       - >-
         us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA
       - .
-    timeout: 1200s  # <-- 이 라인을 추가 (20분)
+    timeout: 1200s
 
-# --- 3. Docker Push 단계 ---
+# --- 4. Docker Push 단계 ---
   - name: gcr.io/cloud-builders/docker
     args:
       - push
       - >-
         us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA
 
-# --- 4. Cloud Run 배포 단계 ---
+# --- 5. Cloud Run 배포 단계 ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     args:
       - run
