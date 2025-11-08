@@ -1,19 +1,27 @@
 steps:
-# --- 1. LFS Install 단계 ---
-# gcr.io/cloud-builders/git 빌더를 사용 (기본 entrypoint가 'git'임)
-# args로 ['lfs', 'install']을 전달하여 'git lfs install' 실행
-# 이 빌더는 Cloud Build의 GitHub 인증 정보를 자동으로 사용함
-  - name: 'gcr.io/cloud-builders/git'
-    args: ['lfs', 'install']
-    timeout: 120s
+# --- 1. LFS 설치 및 파일 다운로드 단계 ---
+# 'cloud-sdk' 빌더를 사용 (Debian 기반이며, 인증 정보가 주입됨)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash' # <-- 기본 entrypoint(gcloud) 대신 bash 쉘을 사용
+    args:
+      - '-c'
+      - |
+        # 1. 패키지 매니저 업데이트 및 curl, git 설치
+        apt-get update
+        apt-get install -y curl git
 
-# --- 2. LFS Pull 단계 ---
-# 동일한 빌더를 사용하여 'git lfs pull' 실행
-  - name: 'gcr.io/cloud-builders/git'
-    args: ['lfs', 'pull']
-    timeout: 1200s # LFS 파일 다운로드를 위해 넉넉한 타임아웃 설정
+        # 2. git-lfs 저장소 설정 스크립트 실행
+        curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
 
-# --- 3. Docker Build 단계 ---
+        # 3. git-lfs 설치
+        apt-get install -y git-lfs
+
+        # 4. LFS 명령 실행
+        git lfs install
+        git lfs pull
+    timeout: 1200s
+
+# --- 2. Docker Build 단계 ---
   - name: gcr.io/cloud-builders/docker
     args:
       - build
@@ -23,14 +31,14 @@ steps:
       - .
     timeout: 1200s
 
-# --- 4. Docker Push 단계 ---
+# --- 3. Docker Push 단계 ---
   - name: gcr.io/cloud-builders/docker
     args:
       - push
       - >-
         us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA
 
-# --- 5. Cloud Run 배포 단계 ---
+# --- 4. Cloud Run 배포 단계 ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     args:
       - run
