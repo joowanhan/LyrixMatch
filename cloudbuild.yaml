@@ -1,0 +1,75 @@
+steps:
+# --- 1. LFS 설치 및 파일 다운로드 단계 ---
+  - name: 'alpine:3.18' # <-- git 빌더 대신 경량 OS 이미지 사용
+    entrypoint: 'sh'      # <-- bash 대신 sh 사용 (alpine 기본 쉘)
+    args:
+      - '-c'
+      - |
+        # 1. 패키지 매니저 업데이트 및 git, git-lfs 설치
+        apk update
+        apk add git
+        apk add git-lfs
+
+        # 2. LFS 명령 실행
+        git lfs install
+        git lfs pull
+    timeout: 1200s
+
+# --- 2. Docker Build 단계 ---
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - '-t'
+      - >-
+        us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA
+      - .
+    timeout: 1200s  # <-- 이 라인을 추가 (20분)
+
+# --- 3. Docker Push 단계 ---
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - >-
+        us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA
+
+# --- 4. Cloud Run 배포 단계 ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    args:
+      - run
+      - deploy
+      - lyrics-api
+      - '--image'
+      - >-
+        us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA
+      - '--region'
+      - us-central1
+      - '--platform'
+      - managed
+      - '--allow-unauthenticated'
+      - '--timeout'
+      - '1200'
+      - '--command'
+      - python
+      - '--args'
+      - api_server.py
+      - '--update-secrets'
+      - 'SPOTIFY_CLIENT_ID=SPOTIFY_CLIENT_ID:latest'
+      - '--update-secrets'
+      - 'SPOTIFY_CLIENT_SECRET=SPOTIFY_CLIENT_SECRET:latest'
+      - '--update-secrets'
+      - 'SPOTIFY_REDIRECT_URI=SPOTIFY_REDIRECT_URI:latest'
+      - '--update-secrets'
+      - 'GENIUS_TOKEN=GENIUS_TOKEN:latest'
+      - '--update-secrets'
+      - 'DEEPL_KEY=DEEPL_KEY:latest'
+      - '--update-secrets'
+      - 'PROXY_URL=PROXY_URL:latest'
+      - '--update-secrets'
+      - 'GCS_BUCKET_NAME=GCS_BUCKET_NAME:latest'
+    entrypoint: gcloud
+# --- 전체 빌드 시간 (1시간) ---
+timeout: 3600s
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/flask-api-repo/lyrics-api:$COMMIT_SHA'
+options:
+  logging: CLOUD_LOGGING_ONLY
