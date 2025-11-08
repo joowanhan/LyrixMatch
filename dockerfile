@@ -16,21 +16,23 @@ COPY requirements.txt .
 # --- 5. Install Dependencies ---
 RUN apt-get update && apt-get install -y \
     gcc python3-dev build-essential \
-    curl git gnupg \
-    curl git git-lfs \
+    curl \
+    # curl git gnupg \
+    # curl git git-lfs \
     libglib2.0-0 libsm6 libxext6 libxrender-dev ffmpeg \
     openjdk-11-jdk-headless \
     # fonts-nanum \
 # --- git-lfs 저장소 설정 스크립트 실행 ---
- && curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash \
+#  && curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash \
 # --- 새 저장소 목록 갱신 및 git-lfs 설치 ---
- && apt-get update \
- && apt-get install -y git-lfs \
+#  && apt-get update \
+#  && apt-get install -y git-lfs \
  # ----------------------------------------
  && pip install --no-cache-dir -r requirements.txt \
  # NLTK 데이터를 이미지 빌드 시점에 /usr/share/nltk_data 경로에 다운로드
  && python -m nltk.downloader -d /usr/share/nltk_data stopwords punkt \
- && apt-get purge -y --auto-remove gcc python3-dev build-essential gnupg \
+#  && apt-get purge -y --auto-remove gcc python3-dev build-essential gnupg \
+ && apt-get purge -y --auto-remove gcc python3-dev build-essential \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -50,7 +52,8 @@ COPY . .
 # --- [추가] LFS Pointer 파일을 실제 파일로 변환 ---
 # .dockerignore에서 .git을 제외했으므로, "COPY . ."가 .git 디렉토리를 복사함
 # 복사된 .git 정보를 바탕으로 LFS 파일을 다운로드함
-RUN git lfs pull
+# [삭제] 이 명령은 cloudbuild.yaml로 이동되었음
+# RUN git lfs pull
 
 # --- 9. Run App with Gunicorn (Production Server) ---
 # [변경] Gunicorn CMD 대신 Python을 직접 실행
