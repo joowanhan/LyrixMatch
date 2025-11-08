@@ -30,7 +30,7 @@ LyrixMatch는 **클라이언트-서버 구조**를 따릅니다.
 ### **서버 (Backend)**
 
 * **언어**: Python 3.10
-* **프레임워크**: Flask, Gunicorn
+* **프레임워크**: Flask, waitress
 * **배포**: Google Cloud Run, Docker
 * **클라우드**: Firestore, Google Cloud Storage
 * **주요 라이브러리**:
