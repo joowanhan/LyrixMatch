@@ -173,11 +173,11 @@ def analyze_song(doc_id, song_title):
     lyrics = song_data.get("lyrics_processed", "")
     if not lyrics:
         return jsonify({"error": "분석할 가사 데이터가 없습니다."}), 400
-    title = song_data.get("title", "")  # <- 'title' 변수를 가져와야 함
+    title = song_data.get("clean_title") or song_data.get("original_title") or ""
 
     # [Robustness] process_lyrics 내부에 이미 try-except가 있으므로
     # 여기서는 반환된 값이 비어있는지만 확인하면 된다.
-    summary, keywords = process_lyrics(lyrics, song_title)
+    summary, keywords = process_lyrics(lyrics, title)
 
     if not summary and not keywords:
         # 모델이 분석에 실패했으나, 서버가 멈추지 않고 400 (Bad Request) 대신
@@ -221,7 +221,7 @@ def get_quizdata_from_firestore(doc_id):
                 if not lyrics.strip():
                     # print(f"Skipping song {song.get('clean_title')} due to empty lyrics.")
                     continue
-                title = song.get("title", "")  # <- 'title' 변수를 가져와야 함
+                title = song.get("clean_title") or song.get("original_title") or ""
 
                 # Eager Loading으로 process_lyrics는 매우 빠르게 실행됨
                 summary, keywords = process_lyrics(lyrics, title)

@@ -227,15 +227,23 @@ def process_lyrics(
     try:
         lang = detect_language(lyrics)
         if lang == "en":
+            # --- 영어 가사 처리 ---
             en_summary = summarize_en(lyrics)
             summary_ko = translate_to_ko(en_summary)
-            # [변경] title을 keywords_en 함수로 전달
+            # 영어 가사 -> 영어 제목(원본)으로 필터링
             kws = keywords_en(lyrics, title=title, top_k=10)
         else:
+            # --- 한국어 가사 처리 ---
             summary_ko = summarize_ko(lyrics)
-            # [변경] title을 keywords_ko 함수로 전달
-            kws = keywords_ko(lyrics, title=title, top_k=10)
+            # 'title' (예: "All For You")을 한국어로 번역 (예: "너를 위하여")
+            # _translator_deepl이 None이면 원본(영어) title이 그대로 전달됨 (Robustness)
+            translated_title_ko = translate_to_ko(title)
+
+            # 한국어 가사 -> '번역된 한국어 제목'으로 필터링
+            kws = keywords_ko(lyrics, title=translated_title_ko, top_k=10)
+
         return summary_ko, kws
+
     except Exception as e:
         # 개별 곡 분석 실패 시 (예: "index out of range in self")
         print(f"⚠️  [Analysis Error] Failed to process single lyric: {e}")
