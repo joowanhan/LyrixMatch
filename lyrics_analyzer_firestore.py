@@ -168,25 +168,47 @@ def translate_to_ko(text: str) -> str:
 
 # ---------------------------  4) 주요 단어 추출 --------------------------- #
 # [수정] Lazy Loading 로직 제거.
-def keywords_en(text: str, top_k: int = 10) -> List[str]:
+def keywords_en(
+    text: str, title: str, top_k: int = 10
+) -> List[str]:  # [변경] title 인자 추가
+    """영어 가사와 제목을 받아, 제목을 제외한 주요 단어 K개를 반환합니다."""
     global _vectorizer_en
     if _vectorizer_en is None:
         raise Exception("English Vectorizer is not loaded.")
+
+    # [추가] 1. 제목에서 필터링할 단어(소문자) set 생성
+    # CountVectorizer의 토큰 패턴과 유사하게 영어 단어만 추출
+    title_words = set(re.findall(r"(?u)\b[a-zA-Z]+\b", title.lower()))
 
     X = _vectorizer_en.fit_transform([text.lower()])
     counts = X.toarray().sum(axis=0)
     vocab = _vectorizer_en.get_feature_names_out()
     freq = sorted(zip(vocab, counts), key=lambda x: x[1], reverse=True)
-    return [w for w, _ in freq[:top_k]]
+
+    # [추가] 2. freq 리스트에서 제목 단어 필터링
+    # _vectorizer_en에 의해 vocab(w)은 이미 소문자, 3글자 이상, 불용어 제거됨
+    filtered_freq = [(w, c) for w, c in freq if w not in title_words]
+
+    # [변경] 필터링된 리스트(filtered_freq)에서 top_k 반환
+    return [w for w, _ in filtered_freq[:top_k]]
 
 
 # [수정] Lazy Loading 로직 제거.
-def keywords_ko(text: str, top_k: int = 10) -> List[str]:
+def keywords_ko(
+    text: str, title: str, top_k: int = 10
+) -> List[str]:  # [변경] title 인자 추가
+    """한국어 가사와 제목을 받아, 제목을 제외한 주요 단어 K개를 반환합니다."""
     global _okt
     if _okt is None:
         raise Exception("Korean (Okt) Tokenizer is not loaded.")
 
-    nouns = [n for n in _okt.nouns(text) if len(n) > 1]  # 2글자 이상
+    # [추가] 1. 제목에서 필터링할 명사 set 생성 (2글자 이상)
+    # 제목도 가사와 동일한 기준으로 명사 추출
+    title_nouns = set([n for n in _okt.nouns(title) if len(n) > 1])
+
+    # [변경] 2. 가사 명사 추출 시 제목 명사(title_nouns)에 없는 것만 필터링
+    nouns = [n for n in _okt.nouns(text) if len(n) > 1 and n not in title_nouns]
+
     cnt = Counter(nouns).most_common(top_k)
     return [w for w, _ in cnt]
 
@@ -195,9 +217,11 @@ def keywords_ko(text: str, top_k: int = 10) -> List[str]:
 
 
 # [수정] 개별 곡 분석 실패 시 500 오류 대신 기본값을 반환하도록 try-except 추가
-def process_lyrics(lyrics: str) -> Tuple[str, List[str]]:
+def process_lyrics(
+    lyrics: str, title: str
+) -> Tuple[str, List[str]]:  # [변경] title 인자 추가
     """
-    가사를 받아 요약과 키워드를 반환합니다.
+    가사와 제목을 받아 요약과 (제목이 필터링된) 키워드를 반환합니다.
     [Robustness] 모델 처리 중 오류 발생 시, 빈 문자열과 빈 리스트를 반환합니다.
     """
     try:
@@ -205,10 +229,12 @@ def process_lyrics(lyrics: str) -> Tuple[str, List[str]]:
         if lang == "en":
             en_summary = summarize_en(lyrics)
             summary_ko = translate_to_ko(en_summary)
-            kws = keywords_en(lyrics)
+            # [변경] title을 keywords_en 함수로 전달
+            kws = keywords_en(lyrics, title=title, top_k=10)
         else:
             summary_ko = summarize_ko(lyrics)
-            kws = keywords_ko(lyrics)
+            # [변경] title을 keywords_ko 함수로 전달
+            kws = keywords_ko(lyrics, title=title, top_k=10)
         return summary_ko, kws
     except Exception as e:
         # 개별 곡 분석 실패 시 (예: "index out of range in self")
@@ -256,7 +282,7 @@ def main(doc_id: str, top_k: int = 10) -> None:
             return
 
         for song in songs:
-            title = song.get("clean_title") or song.get("original_title")
+            title = song.get("clean_title") or song.get("original_title") or ""
             artist = song.get("artist", "Unknown")
             lyrics = song.get("lyrics_processed") or song.get("lyrics") or ""
 
@@ -264,7 +290,8 @@ def main(doc_id: str, top_k: int = 10) -> None:
                 print(f"\n[{title} - {artist}] 가사 정보가 없어 분석을 건너뜁니다.")
                 continue
 
-            summary, kw = process_lyrics(lyrics)
+            # [변경] process_lyrics 호출 시 title 전달
+            summary, kw = process_lyrics(lyrics, title=title)
 
             # ----- 결과 출력 ----- #
             print(f"\n[{title} - {artist}]")
