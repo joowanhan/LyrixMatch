@@ -54,6 +54,14 @@ steps:
       - '--allow-unauthenticated'
       - '--timeout'
       - '1200'
+      # --- 💡 [추가] 시작 CPU 부스트 활성화 ---
+      # 모델 로드 속도를 높이기 위해 시작 시 CPU 할당량을 늘린다.
+      - '--startup-cpu-boost'
+      # --- 💡 [추가] 시작 프로브 설정 명시 ---
+      - '--startup-probe-http-path=/health'
+      - '--startup-probe-period=240'       # every 240s
+      - '--startup-probe-timeout=240'      # 시간 초과 240s
+      - '--startup-probe-failure-threshold=2' # 실패 기준 2
       - '--command'
       - python
       - '--args'
