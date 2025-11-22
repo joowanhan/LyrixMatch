@@ -103,7 +103,7 @@ class ImageService:
                 pass
 
     def _preprocess_lyrics(self, lyrics, title, artist) -> str:
-        """워드클라우드 생성을 위한 텍스트 전처리"""
+        """워드클라우드 생성을 위해 입력 가사를 전처리합니다."""
         # 곡 제목과 아티스트 이름을 추가 불용어로 설정
         title_words = {
             w.lower() for w in re.split(r"\s+", re.sub(r"[^\w\s']", "", title))
@@ -128,7 +128,7 @@ class ImageService:
         return lyrics_processed
 
     def _getFrequencyDict(self, lyrics):
-        """가사 문자열을 통해 단어의 빈도 매핑 생성"""
+        """전처리된 가사를 받아 단어별 빈도 수를 집계하여 multidict.MultiDict 형태로 반환합니다."""
 
         # 1) 문장부호 중 아포스트로피를 제외한 나머지를 공백으로 대체
         #    [^\w\s'] 는 영숫자(\w), 공백(\s), 그리고 ' 만 허용하겠다는 뜻입니다.
@@ -153,7 +153,9 @@ class ImageService:
         return fullTermsDict
 
     def generate_and_upload(self, lyrics, title, artist):
-        """워드클라우드 생성 및 업로드 로직"""
+        """
+        전체 워드클라우드 생성 및 GCS 업로드 워크플로우를 수행합니다.
+        """
         if not lyrics or not self.client:
             return None
 
