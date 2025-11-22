@@ -1,4 +1,7 @@
 import os
+
+# HuggingFace Tokenizers 병렬 처리 경고 끄기 (Deadlock 방지)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from app import create_app
 
 # 앱 팩토리를 통해 앱 생성

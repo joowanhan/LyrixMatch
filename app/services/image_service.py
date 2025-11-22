@@ -9,12 +9,16 @@ class ImageService:
     def __init__(self, bucket_name="lyrixmatch-wordclouds"):
         self.bucket_name = bucket_name
 
-        # [변경점] 경로 설정: app/static/fonts 등에서 파일을 찾도록 변경
+        # 경로 설정: app/static/fonts 등에서 파일을 찾도록 변경
         base_dir = os.getcwd()
         # 폰트 위치: app/static/fonts/NanumGothic.ttf
         self.font_path = os.path.join(
             base_dir, "app", "static", "fonts", "NanumGothic.ttf"
         )
+
+        if not os.path.exists(self.font_path):
+            print(f"❌ [CRITICAL] 폰트 파일을 찾을 수 없습니다: {self.font_path}")
+
         # 마스크 이미지 위치: app/static/mask_image.png (존재한다면)
         self.mask_path = os.path.join(base_dir, "app", "static", "mask_image.png")
 

@@ -1,6 +1,8 @@
+import uuid
 from flask import Blueprint, request, jsonify, current_app
 from firebase_admin import firestore
 import time
+from datetime import datetime, timezone, timedelta
 
 # Blueprint 정의
 quiz_bp = Blueprint("quiz", __name__, url_prefix="/api")
@@ -23,9 +25,25 @@ def fetch_playlist():
     if not playlist_id:
         return jsonify({"error": "playlistId is required"}), 400
 
-    # Request ID 생성 (플레이리스트ID + 타임스탬프)
-    request_id = f"{playlist_id}_{int(time.time())}"
+    # 각 요청을 위한 고유 ID 생성
+    quiz_id = str(uuid.uuid4())
+
+    # 1. UTC+9 시간대 객체 정의 (9시간의 차이)
+    # 이유: KST는 고정된 오프셋이므로, 별도의 외부 라이브러리 없이 표준 모듈로 충분하다.
+    KST_TZ = timezone(timedelta(hours=9))
+
+    # 2. UTC 시간 객체를 KST로 변환
+    utc_now = datetime.now(timezone.utc)
+    kst_now = utc_now.astimezone(KST_TZ)
+
+    # 4. YYYY_MM_DD_HH_MM 형식으로 포맷팅
+    kst_formatted = kst_now.strftime("%Y_%m_%d_%H_%M")
+
+    # Request ID 생성 (플레이리스트ID + 타임스탬프 + uuid)
+    request_id = f"{playlist_id}_{kst_formatted}_{quiz_id}"
     client_ip = request.remote_addr
+    # 프록시 환경을 고려한 실제 IP 확인 방법
+    # client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
     try:
         # MusicDataService 호출 (current_app을 통해 접근)

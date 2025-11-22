@@ -4,7 +4,7 @@ import torch
 from collections import Counter
 from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
 from konlpy.tag import Okt
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
 import deepl
 
 
@@ -13,7 +13,7 @@ class NLPService:
         # 기존 환경변수 및 경로 설정
         self.deepl_key = os.environ.get("DEEPL_KEY")
 
-        # [변경점] 경로 문제 해결: 실행 위치(project_root) 기준으로 경로 설정
+        # 경로 문제 해결: 실행 위치(project_root) 기준으로 경로 설정
         base_dir = os.getcwd()
         self.bart_path = os.path.join(base_dir, "models", "bart")
         self.t5_path = os.path.join(base_dir, "models", "eenzeenee_t5")
@@ -25,6 +25,48 @@ class NLPService:
         self.translator = None
         self.vectorizer = None
         self.okt = None
+
+        # 가사 전용 불용어(Stopwords) 정의
+        # 영어 불용어: 기본 불용어 + 음악 추임새 및 구어체
+        self.stop_words_en = list(ENGLISH_STOP_WORDS) + [
+            "ooh",
+            "oh",
+            "ah",
+            "yeah",
+            "uh",
+            "hey",
+            "baby",
+            "wanna",
+            "gonna",
+            "gotta",
+            "cause",
+            "em",
+            "just",
+            "like",
+        ]
+
+        # 한국어 불용어: 의존명사, 대명사 등 키워드 가치가 낮은 단어
+        self.stop_words_ko = {
+            "그",
+            "저",
+            "이",
+            "것",
+            "안",
+            "수",
+            "등",
+            "들",
+            "좀",
+            "잘",
+            "내",
+            "네",
+            "난",
+            "넌",
+            "널",
+            "우리",
+            "너",
+            "넌",
+            "나",
+        }
 
         # 초기화 시 바로 모델 로드 (Eager Loading 유지)
         self._load_models()
@@ -51,7 +93,7 @@ class NLPService:
                 self.translator = deepl.Translator(self.deepl_key)
 
             # 4. 키워드 추출 도구
-            self.vectorizer = CountVectorizer(stop_words="english")
+            self.vectorizer = CountVectorizer(stop_words=self.stop_words_en)
             self.okt = Okt()
 
             print("✅ [NLPService] 모든 모델 로드 완료.")
@@ -137,8 +179,12 @@ class NLPService:
     def _extract_keywords_korean(self, text):
         try:
             nouns = self.okt.nouns(text)
-            nouns = [n for n in nouns if len(n) > 1]
-            count = Counter(nouns)
+            # stop_words_ko에 포함된 단어 제외
+            filtered_nouns = [
+                n for n in nouns if len(n) > 1 and n not in self.stop_words_ko
+            ]
+
+            count = Counter(filtered_nouns)
             return [word for word, _ in count.most_common(3)]
         except:
             return []
