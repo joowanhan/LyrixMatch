@@ -118,10 +118,10 @@ class NLPService:
         try:
             if is_korean:
                 summary_text = self._summarize_korean(lyrics)
-                keywords = self._extract_keywords_korean(lyrics)
+                keywords = self._extract_keywords_korean(lyrics, title)
             else:
                 summary_text = self._summarize_english(lyrics)
-                keywords = self._extract_keywords_english(lyrics)
+                keywords = self._extract_keywords_english(lyrics, title)
         except Exception as e:
             print(f"⚠️ 분석 중 오류 발생 ({title}): {e}")
             summary_text = "분석 실패"
@@ -166,25 +166,52 @@ class NLPService:
         )
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
 
-    def _extract_keywords_english(self, text):
+    def _extract_keywords_english(self, text, title="", top_k=10):
+        """영어 가사와 제목을 받아, 제목을 제외한 주요 단어 K개를 반환합니다."""
         try:
+            # 1. 제목 단어 필터링 셋 생성
+            title_words = (
+                set(re.findall(r"(?u)\b[a-zA-Z]+\b", title.lower())) if title else set()
+            )
+
             dtm = self.vectorizer.fit_transform([text])
             vocab = self.vectorizer.get_feature_names_out()
             dist = dtm.toarray().flatten()
-            sorted_idx = dist.argsort()[::-1]
-            return [vocab[i] for i in sorted_idx[:3]]
-        except:
+
+            # 빈도수 기준 정렬 (단어, 빈도) 튜플 리스트 생성
+            sorted_items = sorted(zip(vocab, dist), key=lambda x: x[1], reverse=True)
+
+            # 2. 제목에 없는 단어만 필터링
+            filtered_keywords = [
+                word for word, count in sorted_items if word not in title_words
+            ]
+
+            return filtered_keywords[:top_k]
+        except Exception as e:
+            print(f"Keyword extraction failed: {e}")
             return []
 
-    def _extract_keywords_korean(self, text):
+    def _extract_keywords_korean(self, text, title="", top_k=10):
+        """한국어 가사와 제목을 받아, 제목을 제외한 주요 단어 K개를 반환합니다."""
         try:
             nouns = self.okt.nouns(text)
-            # stop_words_ko에 포함된 단어 제외
+
+            # 1. 제목 명사 필터링 셋 생성
+            title_nouns = (
+                set([n for n in self.okt.nouns(title) if len(n) > 1])
+                if title
+                else set()
+            )
+
+            # 2. 조건: 2글자 이상 & 불용어 아님 & 제목에 없음
             filtered_nouns = [
-                n for n in nouns if len(n) > 1 and n not in self.stop_words_ko
+                n
+                for n in nouns
+                if len(n) > 1 and n not in self.stop_words_ko and n not in title_nouns
             ]
 
             count = Counter(filtered_nouns)
-            return [word for word, _ in count.most_common(3)]
-        except:
+            return [word for word, _ in count.most_common(top_k)]
+        except Exception as e:
+            print(f"Keyword extraction failed: {e}")
             return []
