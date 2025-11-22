@@ -26,7 +26,7 @@ class MusicDataService:
         else:
             self.sp = None
         PROXY_URL = ""
-        # PROXY_URL = os.environ.get("PROXY_URL")
+        PROXY_URL = os.environ.get("PROXY_URL")
         proxies = None
         ip_used = "not_checked"  # IP 저장 변수
         if PROXY_URL:
@@ -172,7 +172,6 @@ class MusicDataService:
             BASE_BACKOFF = 5
 
             # Genius 검색
-            # song = self.genius.search_song(title, artist)
             # 3. 검색 루프 (Outer Loop: 검색어 조합 변경)
             for title, artist in search_attempts:
                 if not title or not artist:
@@ -181,7 +180,11 @@ class MusicDataService:
                 # 4. 재시도 루프 (Inner Loop: 429 에러 대응)
                 for i in range(MAX_RETRIES):
                     try:
-                        song = self.genius.search_song(title, artist)
+                        song = self.genius.search_song(
+                            title,
+                            artist,
+                            get_full_info=False,
+                        )
                         if song:
                             break  # 검색 성공 시 재시도 루프 탈출
                     except Exception as e:
@@ -225,37 +228,42 @@ class MusicDataService:
 
     def _clean_lyrics(self, lyrics):
         """
-        [통합 전처리 로직]
-        1. Genius 메타데이터 헤더 제거 (강력한 정규식)
-        2. 섹션 태그([Verse]) 제거
-        3. 꼬리말(Embed, Read More) 제거
-        4. 불필요한 공백 및 줄바꿈 정리
+        1. "Read More" 버튼 텍스트가 있으면, 그 이전(설명글 포함)을 모두 삭제.
+        2. "Read More"가 없으면, 기존 방식대로 "... Lyrics" 헤더 제거.
+        3. 섹션 태그, 꼬리말, 공백 정리.
         """
         if not lyrics:
             return ""
 
-        # 1. Genius 메타데이터 헤더 제거
-        # 패턴: 맨 앞부터 "Lyrics"라는 단어가 나올 때까지의 모든 텍스트 삭제
-        # (flags=re.DOTALL: 줄바꿈 포함해서 매칭)
-        lyrics = re.sub(r"^.*?Lyrics", "", lyrics, flags=re.DOTALL | re.IGNORECASE)
+        # 1. "Read More" 기준 앞부분 통삭제
+        # Genius의 설명글(Description)이 길어지면 "Read More" 버튼 텍스트가 포함됨.
+        # 이 경우 "Read More" 앞부분은 100% 가사가 아닌 메타데이터이므로 삭제
+        if re.search(r"Read More", lyrics, re.IGNORECASE):
+            # (?s) : 점(.)이 줄바꿈도 포함하도록 설정
+            # .*? : Non-greedy 매칭 (첫 번째 Read More까지만 삭제)
+            lyrics = re.sub(
+                r"(?s).*?Read More", "", lyrics, count=1, flags=re.IGNORECASE
+            )
+        else:
+            # 2. "Read More"가 없는 경우 (설명글이 짧거나 없는 경우)
+            # 기존 방식: 맨 앞부터 "Lyrics" 단어까지 삭제 (제목+Contributors 제거)
+            lyrics = re.sub(r"^.*?Lyrics", "", lyrics, flags=re.DOTALL | re.IGNORECASE)
 
-        # 2. 섹션 태그 제거 ([Verse 1], [Chorus] 등)
+        # 3. 섹션 태그 제거 ([Verse 1], [Chorus] 등)
         lyrics = re.sub(r"\[.*?\]", "", lyrics)
 
-        # 3. 불필요한 꼬리말 제거
-        # (숫자+Embed 로 끝나는 패턴 제거)
+        # 4. 불필요한 꼬리말 제거
+        # 숫자+Embed 로 끝나는 패턴 (예: "25Embed")
         lyrics = re.sub(r"\d*Embed$", "", lyrics)
-        # (Read More 문구 제거)
-        lyrics = re.sub(r".*Read More.*", "", lyrics, flags=re.IGNORECASE)
 
-        # 4. Translations 이후 제거
+        # 5. Translations 텍스트 제거 (가끔 가사 뒤에 번역 링크가 붙음)
         if "Translations" in lyrics:
             lyrics = lyrics.split("Translations")[0]
 
-        # 5. 공백 정리
-        # 여러 줄 바꿈 -> 한 줄 바꿈
-        lyrics = re.sub(r"\n{2,}", "\n", lyrics)
-        # 여러 공백 -> 한 공백
+        # 6. 공백 및 줄바꿈 정리
+        # 3줄 이상의 공백 -> 1줄로 축소
+        lyrics = re.sub(r"\n{3,}", "\n", lyrics)
+        # 탭이나 다중 공백 -> 스페이스 1개
         lyrics = re.sub(r"[ \t]+", " ", lyrics)
 
         return lyrics.strip()
