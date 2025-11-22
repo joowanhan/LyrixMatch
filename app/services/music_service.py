@@ -104,9 +104,10 @@ class MusicDataService:
             tracks = random.sample(tracks, MAX_TRACKS_LIMIT)
 
         # 2. Genius 가사 병렬 수집
-        print(f"✅ {len(tracks)}개 트랙 처리 시작 — Genius 가사 검색")
         MAX_WORKERS = 10
         processed_songs = []
+        print(f"✅ {len(tracks)}개 트랙 처리 시작 — Genius 가사 검색")
+        print(f"⚡️ {MAX_WORKERS}개 스레드로 동시 가사 수집")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_song = {
@@ -174,6 +175,7 @@ class MusicDataService:
             # Genius 검색
             # 3. 검색 루프 (Outer Loop: 검색어 조합 변경)
             for title, artist in search_attempts:
+                print(f"🪏 {title} - {artist} 수집 시작")
                 if not title or not artist:
                     continue
 
