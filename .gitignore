@@ -22,7 +22,7 @@ __pycache__/
 
 # for backup and test
 get_lyrics_save_firestore_uniprocess.py
-test_*.py
+/test_*.py
 copy_*.py
 copy*_*.py
 copy_dockerfile.txt
