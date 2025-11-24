@@ -1,4 +1,4 @@
-# LyrixMatch (Refactored)
+# LyrixMatch (Refact-OOP)
 
 > **자연어 처리(NLP) 기반 가사-제목 추론형 퀴즈 서비스** \> *Legacy 코드를 OOP(객체 지향 프로그래밍) 및 MSC 아키텍처로 리팩토링한 버전입니다.*
 LyrixMatch는 자연어 처리(NLP) 기술을 활용하여 사용자가 노래 가사의 일부만 보고 원곡의 제목을 맞히는 Flutter 기반의 모바일 퀴즈 애플리케이션입니다. 사용자가 Spotify 플레이리스트 URL을 입력하면, 서버가 자동으로 가사를 수집 및 분석하여 요약문과 핵심 키워드를 추출하고, 이를 기반으로 퀴즈를 생성합니다.
@@ -9,10 +9,13 @@ LyrixMatch는 자연어 처리(NLP) 기술을 활용하여 사용자가 노래 �
 기존의 절차지향적 스크립트 방식에서 발생하는 유지보수의 어려움과 테스트의 복잡성을 해결하기 위해 **대대적인 리팩토링**을 진행했습니다.
 
 ### 1\. MSC (Model-Service-Controller) 아키텍처 도입
+MSC 패턴은 **Controller와 Model 사이에 Service Layer를 추가**하여 비즈니스 로직을 격리하는 아키텍처입니다.
 
-  - **Controller (`app/controllers`):** HTTP 요청 검증 및 라우팅만을 담당합니다. 비즈니스 로직을 전혀 포함하지 않아 코드가 간결해졌습니다.
-  - **Service (`app/services`):** 핵심 비즈니스 로직을 독립적인 클래스(`MusicDataService`, `NLPService`, `ImageService`)로 분리하여 캡슐화했습니다.
-  - **Model:** 데이터 구조와 스키마를 관리합니다.
+| 계층 (Layer) | 구성 요소 (Component) | 역할 (Responsibility) | LyrixMatch 적용 예시 |
+| :--- | :--- | :--- | :--- |
+| **Controller** | `quiz_controller.py` | **"교통 정리"**<br>- HTTP 요청 수신 및 파라미터 검증<br>- 적절한 Service 호출<br>- 결과를 JSON으로 포맷팅하여 응답 | `/crawl` 요청을 받아 `playlist_id`가 있는지 확인하고 서비스에 넘김. |
+| **Service** | `nlp_service.py`<br>`music_service.py`<br>`image_service.py` | **"실제 작업 수행"**<br>- 핵심 비즈니스 로직 구현<br>- 외부 API 연동, 계산, 데이터 가공<br>- DB 트랜잭션 관리 | Spotify에서 곡을 긁어오고, Genius 가사를 찾고, AI 요약을 수행함. |
+| **Model** | (Firestore Dict) | **"데이터 구조"**<br>- 데이터베이스 스키마 정의<br>- 데이터 객체 (DTO) | Firestore의 `user_playlists` 컬렉션 구조. |
 
 ### 2\. 의존성 주입 (Dependency Injection)
 
@@ -63,6 +66,7 @@ LyrixMatch-refact-OOP/
 LyrixMatch는 **클라이언트-서버 구조**를 따릅니다.
 
 * **클라이언트 (Flutter App)**: 사용자와의 상호작용을 담당하며, Spotify 플레이리스트 URL 입력, 퀴즈 풀이, 힌트 요청, 결과 확인 등의 기능을 수행합니다. 서버와는 REST API를 통해 통신합니다.
+  * 플러터 앱 소스코드: https://github.com/joowanhan/LyrixMatch-App
 * **서버 (Flask API on Google Cloud Run)**: Python 기반의 Flask 프레임워크로 구현되었으며, Google Cloud Run을 통해 서버리스 환경에 배포됩니다. 가사 수집, 자연어 처리, 워드클라우드 생성 등 핵심 로직을 처리합니다. 특히, 다수의 곡을 처리할 때 발생하는 지연을 줄이기 위해 가사 수집 과정에 **병렬 처리를 도입**하여 성능을 최적화했습니다.
 * **데이터베이스 (Firestore)**: 기존의 JSON 파일 저장 방식에서 Firestore로 업데이트하여, 가사 및 퀴즈 데이터를 보다 안정적으로 관리합니다.
 * **스토리지 (Google Cloud Storage)**: 워드클라우드와 같이 생성된 이미지 파일들을 GCS에 영구 저장하여, 다중 사용자 환경에서도 데이터의 일관성과 안정성을 확보합니다.
@@ -99,7 +103,7 @@ LyrixMatch는 **클라이언트-서버 구조**를 따릅니다.
 | **GET** | `/analyze/<doc_id>/<title>` | (지연 분석) 특정 곡의 요약문 및 키워드를 실시간 분석하여 반환 |
 | **GET** | `/wordcloud/<doc_id>/<title>` | 워드클라우드 이미지를 생성하여 GCS 업로드 후 URL 반환 |
 | **GET** | `/health` | 서버 상태 확인 (Health Check) |
-| **GET** | `/debug` | 서버 리소스 및 DB 연결 상태 디버깅 정보 반환 |
+<!-- | **GET** | `/debug` | 서버 리소스 및 DB 연결 상태 디버깅 정보 반환 | -->
 
 -----
 
