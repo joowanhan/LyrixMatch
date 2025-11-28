@@ -1,217 +1,93 @@
 import os
-import re
-import torch
-from collections import Counter
-from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
-from konlpy.tag import Okt
-from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
-import deepl
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
+
+
+# 1. 응답 데이터 구조 정의 (Pydantic)
+# Gemini가 이 스키마에 맞춰서 정확한 JSON을 생성하도록 강제합니다.
+class AnalysisResult(BaseModel):
+    summary: str = Field(
+        description="가사의 핵심 서사와 감정을 요약한 텍스트. 3문장 이내의 한국어 하십시오체(예: 노래합니다)를 사용."
+    )
+    keywords: list[str] = Field(
+        description="가사에서 가장 핵심적인 단어 10개 리스트. 제목에 포함된 단어와 불용어는 제외."
+    )
 
 
 class NLPService:
     def __init__(self):
-        # 기존 환경변수 및 경로 설정
-        self.deepl_key = os.environ.get("DEEPL_KEY")
+        # 2. 클라이언트 초기화
+        # 환경변수 GEMINI_API_KEY 자동으로 감지합니다.
+        self.api_key = os.environ.get("GEMINI_API_KEY")
 
-        # 경로 문제 해결: 실행 위치(project_root) 기준으로 경로 설정
-        base_dir = os.getcwd()
-        self.bart_path = os.path.join(base_dir, "models", "bart")
-        self.t5_path = os.path.join(base_dir, "models", "eenzeenee_t5")
-
-        # 모델 변수 초기화 (None)
-        self.summarizer = None
-        self.tokenizer = None
-        self.model = None
-        self.translator = None
-        self.vectorizer = None
-        self.okt = None
-
-        # 가사 전용 불용어(Stopwords) 정의
-        # 영어 불용어: 기본 불용어 + 음악 추임새 및 구어체
-        self.stop_words_en = list(ENGLISH_STOP_WORDS) + [
-            "ooh",
-            "oh",
-            "ah",
-            "yeah",
-            "uh",
-            "hey",
-            "baby",
-            "wanna",
-            "gonna",
-            "gotta",
-            "cause",
-            "em",
-            "just",
-            "like",
-        ]
-
-        # 한국어 불용어: 의존명사, 대명사 등 키워드 가치가 낮은 단어
-        self.stop_words_ko = {
-            "그",
-            "저",
-            "이",
-            "것",
-            "안",
-            "수",
-            "등",
-            "들",
-            "좀",
-            "잘",
-            "내",
-            "네",
-            "난",
-            "넌",
-            "널",
-            "우리",
-            "너",
-            "넌",
-            "나",
-        }
-
-        # 초기화 시 바로 모델 로드 (Eager Loading 유지)
-        self._load_models()
-
-    def _load_models(self):
-        """기존 load_all_models() 함수 로직"""
-        print("⏳ [NLPService] AI 모델 로딩 중... (기존 설정 유지)")
-        try:
-            # 1. BART (영어 요약)
-            # GPU 사용 가능 여부 확인 로직 유지
-            device = 0 if torch.cuda.is_available() else -1
-            self.summarizer = pipeline(
-                "summarization", model=self.bart_path, device=device
-            )
-
-            # 2. T5 (한국어 요약)
-            self.tokenizer = AutoTokenizer.from_pretrained(self.t5_path)
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.t5_path).to(
-                torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            )
-
-            # 3. DeepL
-            if self.deepl_key:
-                self.translator = deepl.Translator(self.deepl_key)
-
-            # 4. 키워드 추출 도구
-            self.vectorizer = CountVectorizer(stop_words=self.stop_words_en)
-            self.okt = Okt()
-
-            print("✅ [NLPService] 모든 모델 로드 완료.")
-        except Exception as e:
-            print(f"❌ [NLPService] 모델 로딩 실패: {e}")
+        if not self.api_key:
+            print("⚠️ [NLPService] 경고: GEMINI_API_KEY가 설정되지 않았습니다.")
+            self.client = None
+        else:
+            # v2.0 SDK는 인스턴스화 시 키를 명시하지 않아도 환경변수를 읽지만,
+            # 명시적으로 넣어주는 것이 안전합니다.
+            self.client = genai.Client(api_key=self.api_key)
+            print("✅ [NLPService] Google GenAI SDK Client (v2.0) 초기화 완료.")
 
     def process_lyrics(self, lyrics, title=""):
-        """기존 process_lyrics 함수 로직"""
+        """
+        Gemini 2.5 Flash Lite를 사용하여 가사 요약 및 키워드 추출
+        """
+        # 방어 코드
         if not lyrics:
             return "가사 없음", []
+        if not self.client:
+            return "API 키 미설정 오류", []
 
-        # 언어 감지 로직 유지
-        kor_char_count = len(re.findall("[가-힣]", lyrics))
-        total_char_count = len(lyrics)
-        is_korean = (
-            (kor_char_count / total_char_count) > 0.5 if total_char_count > 0 else False
-        )
+        # 3. 프롬프트 구성
+        prompt = f"""
+        당신은 통찰력 있는 음악 퀴즈 출제자입니다. 
+        아래 노래 정보를 분석하여 구조화된 데이터를 추출해주세요.
 
-        summary_text = ""
-        keywords = []
+        [곡 정보]
+        - 제목: {title}
+        - 가사:
+        {lyrics}
+        """
 
         try:
-            if is_korean:
-                summary_text = self._summarize_korean(lyrics)
-                keywords = self._extract_keywords_korean(lyrics, title)
+            # 4. API 호출 (구조화된 출력 사용)
+            response = self.client.models.generate_content(
+                model="gemini-2.5-flash-lite",  # 최신 경량 모델 사용
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=AnalysisResult,  # Pydantic 클래스 직접 전달
+                    temperature=0.3,
+                    # 안전 설정: 가사의 예술적 표현 허용 (BLOCK_NONE 적용)
+                    safety_settings=[
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            threshold="BLOCK_NONE",
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                            threshold="BLOCK_NONE",
+                        ),
+                    ],
+                ),
+            )
+
+            # 5. 결과 반환 (SDK가 Pydantic 객체로 자동 변환해줌)
+            if response.parsed:
+                return response.parsed.summary, response.parsed.keywords
             else:
-                summary_text = self._summarize_english(lyrics)
-                keywords = self._extract_keywords_english(lyrics, title)
+                # 파싱된 결과가 없는 경우 (매우 드묾)
+                print(f"⚠️ [NLPService] 파싱된 응답 없음. 원문: {response.text}")
+                return "분석 실패", []
+
         except Exception as e:
-            print(f"⚠️ 분석 중 오류 발생 ({title}): {e}")
-            summary_text = "분석 실패"
-
-        return summary_text, keywords
-
-    def _summarize_english(self, text):
-        # 기존의 길이 계산 로직 100% 유지
-        input_len = len(text.split())
-        max_len = min(100, max(30, int(input_len * 0.6)))
-        min_len = max(10, int(input_len * 0.2))
-
-        # BART 파이프라인 호출
-        summary = self.summarizer(
-            text[:4000], max_length=max_len, min_length=min_len, do_sample=False
-        )
-        full_summary = summary[0]["summary_text"]
-
-        # 3문장 추출 로직 유지
-        sentences = full_summary.split(". ")
-        final_summary = ". ".join(sentences[:3]) + "."
-
-        # DeepL 번역
-        if self.translator:
-            try:
-                translated = self.translator.translate_text(
-                    final_summary, target_lang="KO"
-                )
-                return translated.text
-            except:
-                pass
-        return final_summary
-
-    def _summarize_korean(self, text):
-        # T5 생성 파라미터 유지 (max_length=128, num_beams=3)
-        prefix = "summarize: " + text.replace("\n", " ")
-        tokenized = self.tokenizer(prefix, return_tensors="pt").input_ids.to(
-            self.model.device
-        )
-        output = self.model.generate(
-            tokenized, max_length=128, num_beams=3, early_stopping=True
-        )
-        return self.tokenizer.decode(output[0], skip_special_tokens=True)
-
-    def _extract_keywords_english(self, text, title="", top_k=10):
-        """영어 가사와 제목을 받아, 제목을 제외한 주요 단어 K개를 반환합니다."""
-        try:
-            # 1. 제목 단어 필터링 셋 생성
-            title_words = (
-                set(re.findall(r"(?u)\b[a-zA-Z]+\b", title.lower())) if title else set()
-            )
-
-            dtm = self.vectorizer.fit_transform([text])
-            vocab = self.vectorizer.get_feature_names_out()
-            dist = dtm.toarray().flatten()
-
-            # 빈도수 기준 정렬 (단어, 빈도) 튜플 리스트 생성
-            sorted_items = sorted(zip(vocab, dist), key=lambda x: x[1], reverse=True)
-
-            # 2. 제목에 없는 단어만 필터링
-            filtered_keywords = [
-                word for word, count in sorted_items if word not in title_words
-            ]
-
-            return filtered_keywords[:top_k]
-        except Exception as e:
-            print(f"Keyword extraction failed: {e}")
-            return []
-
-    def _extract_keywords_korean(self, text, title="", top_k=10):
-        """한국어 가사와 제목을 받아, 제목을 제외한 주요 단어 K개를 반환합니다."""
-        try:
-            nouns = self.okt.nouns(text)
-
-            # 1. 제목 명사 필터링 셋 생성
-            title_nouns = (
-                set([n for n in self.okt.nouns(title) if len(n) > 1])
-                if title
-                else set()
-            )
-
-            # 2. 조건: 2글자 이상 & 불용어 아님 & 제목에 없음
-            filtered_nouns = [
-                n
-                for n in nouns
-                if len(n) > 1 and n not in self.stop_words_ko and n not in title_nouns
-            ]
-
-            count = Counter(filtered_nouns)
-            return [word for word, _ in count.most_common(top_k)]
-        except Exception as e:
-            print(f"Keyword extraction failed: {e}")
-            return []
+            print(f"❌ [NLPService] Gemini 분석 실패: {e}")
+            return "AI 서비스 오류 발생", []

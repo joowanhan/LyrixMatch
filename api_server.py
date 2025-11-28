@@ -1,5 +1,9 @@
 import os
+from dotenv import load_dotenv  # 추가
 from waitress import serve
+
+# .env 파일 로드 (가장 먼저 실행)
+load_dotenv()
 
 # HuggingFace Tokenizers 병렬 처리 경고 끄기 (Deadlock 방지)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
