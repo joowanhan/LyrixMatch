@@ -1,25 +1,25 @@
 steps:
-# --- 1. LFS 설치 및 파일 다운로드 단계 ---
-# 'cloud-sdk' 빌더를 사용 (Debian 기반이며, 인증 정보가 주입됨)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'bash' # <-- 기본 entrypoint(gcloud) 대신 bash 쉘을 사용
-    args:
-      - '-c'
-      - |
-        # 1. 패키지 매니저 업데이트 및 curl, git 설치
-        apt-get update
-        apt-get install -y curl git
+# # --- 1. LFS 설치 및 파일 다운로드 단계 ---
+# # 'cloud-sdk' 빌더를 사용 (Debian 기반이며, 인증 정보가 주입됨)
+#   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+#     entrypoint: 'bash' # <-- 기본 entrypoint(gcloud) 대신 bash 쉘을 사용
+#     args:
+#       - '-c'
+#       - |
+#         # 1. 패키지 매니저 업데이트 및 curl, git 설치
+#         apt-get update
+#         apt-get install -y curl git
 
-        # 2. git-lfs 저장소 설정 스크립트 실행
-        curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
+#         # 2. git-lfs 저장소 설정 스크립트 실행
+#         curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
 
-        # 3. git-lfs 설치
-        apt-get install -y git-lfs
+#         # 3. git-lfs 설치
+#         apt-get install -y git-lfs
 
-        # 4. LFS 명령 실행
-        git lfs install
-        git lfs pull
-    timeout: 1200s
+#         # 4. LFS 명령 실행
+#         git lfs install
+#         git lfs pull
+#     timeout: 1200s
 
 # --- 2. Docker Build 단계 ---
   - name: gcr.io/cloud-builders/docker
@@ -73,6 +73,8 @@ steps:
       - 'PROXY_URL=PROXY_URL:latest'
       - '--update-secrets'
       - 'GCS_BUCKET_NAME=GCS_BUCKET_NAME:latest'
+      - '--update-secrets'
+      - 'GEMINI_API_KEY=GEMINI_API_KEY:latest'
     entrypoint: gcloud
 # --- 전체 빌드 시간 (1시간) ---
 timeout: 3600s
