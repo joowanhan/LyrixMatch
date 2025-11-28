@@ -1,4 +1,4 @@
-# LyrixMatch (Refact-OOP,gemini)
+# LyrixMatch (Refact-OOP, gemini)
 
 ## **자연어 처리(NLP) 기반 가사-제목 추론형 퀴즈 서비스** 
 
