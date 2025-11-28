@@ -28,3 +28,5 @@ examples/
 
 # 테스트 스크립트 (서버 구동과 무관)
 test_*.py
+
+models/
