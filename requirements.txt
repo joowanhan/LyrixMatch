@@ -9,6 +9,7 @@ numpy
 multidict
 
 google-genai
+pydantic
 
 firebase-admin
 google-cloud-storage
