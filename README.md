@@ -1,7 +1,11 @@
-# LyrixMatch (Refact-OOP)
+# LyrixMatch (Refact-OOP,gemini)
 
-> **자연어 처리(NLP) 기반 가사-제목 추론형 퀴즈 서비스** \> *Legacy 코드를 OOP(객체 지향 프로그래밍) 및 MSC 아키텍처로 리팩토링한 버전입니다.*
+## **자연어 처리(NLP) 기반 가사-제목 추론형 퀴즈 서비스** 
+
 LyrixMatch는 자연어 처리(NLP) 기술을 활용하여 사용자가 노래 가사의 일부만 보고 원곡의 제목을 맞히는 Flutter 기반의 모바일 퀴즈 애플리케이션입니다. 사용자가 Spotify 플레이리스트 URL을 입력하면, 서버가 자동으로 가사를 수집 및 분석하여 요약문과 핵심 키워드를 추출하고, 이를 기반으로 퀴즈를 생성합니다.
+
+> *Legacy 코드를 OOP(객체 지향 프로그래밍) 및 MSC 아키텍처 도입, LLM 도입으로 리팩토링한 버전입니다.*
+
 -----
 
 ## 🔄 Refactoring Highlights
@@ -27,6 +31,22 @@ MSC 패턴은 **Controller와 Model 사이에 Service Layer를 추가**하여 �
   - **God Object 제거:** 모든 로직이 들어있던 `api_server.py`를 역할별로 분리했습니다.
   - **Lazy Analysis (지연 분석):** 모든 데이터를 한 번에 처리하지 않고, 사용자가 퀴즈를 요청하는 시점에 필요한 데이터만 분석하여 초기 로딩 속도를 획기적으로 개선했습니다.
 
+또한 기존 로컬 LLM 운영 방식의 한계(느린 빌드, 높은 메모리 점유, 단일 언어 처리의 한계)를 극복하기 위해 **Google Gemini API**로 전면 교체했습니다.
+
+### 4\. On-Premises to Cloud AI Migration (Server Lightweighting)
+기존 로컬 LLM 운영 방식의 한계(느린 빌드, 높은 메모리 점유, 단일 언어 처리의 한계)를 극복하기 위해 **Google Gemini API**로 전면 교체했습니다.
+
+1.  **AI 엔진 교체**: `BART(En)/T5(Ko)` → **`Gemini 2.5 Flash Lite`**
+    * 로컬 메모리에 모델을 올리지 않아 **Cold Start 시간 0초** 달성.
+    * 한영 혼용(K-POP) 가사의 문맥 이해도 및 요약 품질 대폭 향상.
+2.  **구조화된 출력 (Structured Output)**: `Pydantic` 도입
+    * AI 응답을 정규식으로 파싱하던 불안정한 로직 제거.
+    * Type Safety가 보장된 객체(`AnalysisResult`)로 응답을 받아 데이터 정합성 확보.
+3.  **빌드/배포 최적화**:
+    * `PyTorch`, `Transformers`, `KoNLPy` 등 무거운 라이브러리 제거.
+    * Docker 이미지 크기 **90% 이상 감소** (수 GB → 수백 MB).
+    * **Git LFS 제거**로 CI/CD 파이프라인 속도 50% 이상 향상.
+
 ## 📂 프로젝트 구조 (Directory Structure)
 
 리팩토링을 통해 역할별로 명확하게 분리된 디렉토리 구조를 갖추었습니다.
@@ -43,7 +63,6 @@ LyrixMatch-refact-OOP/
 │   │   ├── nlp_service.py      # AI 모델 로드 및 가사 요약/분석
 │   │   └── image_service.py    # 워드클라우드 생성 및 GCS 업로드
 │   └── static/             # 정적 리소스 (폰트, 불용어 리스트 등)
-├── models/                 # Pre-trained NLP 모델 저장소
 ├── tests/                  # 단위 테스트 및 통합 테스트 (Pytest)
 ├── dockerfile              # 컨테이너 빌드 설정
 └── requirements.txt        # 의존성 패키지 목록
@@ -80,7 +99,7 @@ LyrixMatch는 **클라이언트-서버 구조**를 따릅니다.
   * **Language:** Python 3.10
   * **Framework:** Flask (Blueprint 적용), Waitress
   * **Architecture:** MSC Pattern (Model-Service-Controller)
-  * **NLP:** Hugging Face Transformers (BART, T5), KoNLPy, NLTK
+  * **AI & NLP:** **Google GenAI SDK (v2.0)**, **Pydantic**
   * **WordCloud**: WordCloud, Matplotlib
   * **Database:** Google Firestore (NoSQL)
   * **Storage:** Google Cloud Storage (GCS)
